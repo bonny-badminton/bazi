@@ -1,0 +1,2102 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>八字命盤</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="八字命盤">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#FBF8F2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700;800&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #FBF8F2; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import React, { useState, useEffect, useMemo, useCallback } from "https://esm.sh/react@18";
+import { createRoot } from "https://esm.sh/react-dom@18/client";
+import { Plus, ChevronLeft, ChevronRight, User, Users, X, Sparkles, Coins, Briefcase, Heart, HeartHandshake, Calendar as CalendarIcon, Trash2, Check, ChevronDown, ChevronUp, Loader2, HeartPulse, GraduationCap } from "https://esm.sh/lucide-react@0.383.0?external=react";
+
+/* ============================================================
+   曆法常數 CONSTANTS
+   ============================================================ */
+const STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
+const STEM_ELEMENT = ["木", "木", "火", "火", "土", "土", "金", "金", "水", "水"];
+const STEM_YY = ["陽", "陰", "陽", "陰", "陽", "陰", "陽", "陰", "陽", "陰"];
+const BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+const BRANCH_ELEMENT = ["水", "土", "木", "木", "土", "火", "火", "土", "金", "金", "土", "水"];
+const BRANCH_ANIMAL = ["鼠", "牛", "虎", "兔", "龍", "蛇", "馬", "羊", "猴", "雞", "狗", "豬"];
+const BRANCH_HOURS = ["23:00–00:59", "01:00–02:59", "03:00–04:59", "05:00–06:59", "07:00–08:59", "09:00–10:59", "11:00–12:59", "13:00–14:59", "15:00–16:59", "17:00–18:59", "19:00–20:59", "21:00–22:59"];
+const EL = {
+  木: {
+    color: "#5b8c5a",
+    bg: "rgba(91,140,90,0.14)"
+  },
+  火: {
+    color: "#c0524a",
+    bg: "rgba(192,82,74,0.14)"
+  },
+  土: {
+    color: "#b08a4e",
+    bg: "rgba(176,138,78,0.16)"
+  },
+  金: {
+    color: "#a8945f",
+    bg: "rgba(168,148,95,0.16)"
+  },
+  水: {
+    color: "#4f7590",
+    bg: "rgba(79,117,144,0.16)"
+  }
+};
+const GENERATES = {
+  木: "火",
+  火: "土",
+  土: "金",
+  金: "水",
+  水: "木"
+};
+const OVERCOMES = {
+  木: "土",
+  土: "水",
+  水: "火",
+  火: "金",
+  金: "木"
+};
+const COMBO = [1, 0, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]; // branch i 六合 partner
+const CLASH = [6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5]; // branch i 六沖 partner
+
+// 三合桃花局：group -> 桃花 branch
+const PEACH_MAP = {
+  "2,6,10": 3,
+  // 寅午戌 見 卯
+  "8,0,4": 9,
+  // 申子辰 見 酉
+  "5,9,1": 6,
+  // 巳酉丑 見 午
+  "11,3,7": 0 // 亥卯未 見 子
+};
+function peachBlossomBranch(branchIdx) {
+  for (const key of Object.keys(PEACH_MAP)) {
+    if (key.split(",").map(Number).includes(branchIdx)) return PEACH_MAP[key];
+  }
+  return null;
+}
+
+/* ============================================================
+   曆法計算 CALENDAR MATH
+   ============================================================ */
+// Julian Day Number (integer, for local calendar date at noon)
+function toJDN(y, m, d) {
+  const a = Math.floor((14 - m) / 12);
+  const yy = y + 4800 - a;
+  const mm = m + 12 * a - 3;
+  return d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
+}
+// Calibrated anchor: JDN(2024-01-01) = 2460311 => 甲子日 (cycle position 0)
+const DAY_ANCHOR_JDN = 2460311;
+function dayGanZhiFromJDN(jdn) {
+  const cycle = ((jdn - DAY_ANCHOR_JDN) % 60 + 60) % 60;
+  return {
+    stemIdx: cycle % 10,
+    branchIdx: cycle % 12
+  };
+}
+
+// Low-precision solar apparent ecliptic longitude (Meeus ch.25), degrees [0,360)
+function julianDateUTC(y, m, d, h = 12, min = 0) {
+  // treats input as UT
+  const dayFrac = d + (h + min / 60) / 24;
+  const a = Math.floor((14 - m) / 12);
+  const yy = y + 4800 - a;
+  const mm = m + 12 * a - 3;
+  let jdn = dayFrac + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045 - 0.5;
+  return jdn;
+}
+function solarLongitude(jd) {
+  const T = (jd - 2451545.0) / 36525;
+  const L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
+  const M = 357.52911 + 35999.05029 * T - 0.0001537 * T * T;
+  const Mrad = M * Math.PI / 180;
+  const C = (1.914602 - 0.004817 * T - 0.000014 * T * T) * Math.sin(Mrad) + (0.019993 - 0.000101 * T) * Math.sin(2 * Mrad) + 0.000289 * Math.sin(3 * Mrad);
+  const trueLong = L0 + C;
+  const omega = 125.04 - 1934.136 * T;
+  const lambda = trueLong - 0.00569 - 0.00478 * Math.sin(omega * Math.PI / 180);
+  return (lambda % 360 + 360) % 360;
+}
+
+// Full BaZi (四柱) for a birth moment. hour may be null if unknown.
+// Birth civil time is assumed to be Taiwan/China standard time (UTC+8), the convention used by virtually all BaZi practice.
+const CIVIL_TZ_OFFSET = 8;
+function computeBazi(y, m, d, hour, minute) {
+  // day pillar: always the actual calendar day (no shift)
+  const jdn = toJDN(y, m, d);
+  const day = dayGanZhiFromJDN(jdn);
+  const jd = julianDateUTC(y, m, d, (hour ?? 12) - CIVIL_TZ_OFFSET, minute ?? 0);
+  const lambda = solarLongitude(jd);
+  const adjusted = ((lambda - 315) % 360 + 360) % 360;
+  const monthIndex = Math.floor(adjusted / 30); // 0=寅 ... 11=丑
+  const monthBranchIdx = (2 + monthIndex) % 12;
+
+  // ganzhi year (立春 boundary)
+  let ganzhiYear = y;
+  if (m === 1) ganzhiYear = y - 1;else if (m === 2 && monthIndex === 11) ganzhiYear = y - 1;
+  const yearStemIdx = ((ganzhiYear - 4) % 10 + 10) % 10;
+  const yearBranchIdx = ((ganzhiYear - 4) % 12 + 12) % 12;
+
+  // month stem via 五虎遁
+  const firstMonthStem = [2, 4, 6, 8, 0][yearStemIdx % 5];
+  const monthStemIdx = (firstMonthStem + monthIndex) % 10;
+  let hourPillar = null;
+  if (hour !== null && hour !== undefined) {
+    const hourBranchIdx = Math.floor((hour + 1) % 24 / 2);
+    // 夜子時 (23:00–23:59): the hour-stem is derived as if it were the next day's 子時,
+    // even though the day pillar shown still belongs to the current calendar day.
+    let stemBaseIdx = day.stemIdx;
+    if (hour === 23) {
+      const nd = new Date(Date.UTC(y, m - 1, d + 1));
+      const nJdn = toJDN(nd.getUTCFullYear(), nd.getUTCMonth() + 1, nd.getUTCDate());
+      stemBaseIdx = dayGanZhiFromJDN(nJdn).stemIdx;
+    }
+    const baseHourStem = [0, 2, 4, 6, 8][stemBaseIdx % 5];
+    const hourStemIdx = (baseHourStem + hourBranchIdx) % 10;
+    hourPillar = {
+      stemIdx: hourStemIdx,
+      branchIdx: hourBranchIdx
+    };
+  }
+  return {
+    year: {
+      stemIdx: yearStemIdx,
+      branchIdx: yearBranchIdx
+    },
+    month: {
+      stemIdx: monthStemIdx,
+      branchIdx: monthBranchIdx
+    },
+    day,
+    hour: hourPillar,
+    ganzhiYear,
+    meta: {
+      jd,
+      monthIndex
+    }
+  };
+}
+
+// Bisection root-finder for "when does the sun's longitude equal target degrees" (used for 大運 start-age)
+function findLongitudeCrossing(jdLow, jdHigh, targetDeg) {
+  function diff(jd) {
+    let dlt = solarLongitude(jd) - targetDeg;
+    return (dlt + 540) % 360 - 180; // normalize to (-180,180]
+  }
+  let a = jdLow,
+    b = jdHigh,
+    fa = diff(a);
+  for (let i = 0; i < 50; i++) {
+    const mid = (a + b) / 2;
+    const fm = diff(mid);
+    if (fa <= 0 && fm >= 0 || fa >= 0 && fm <= 0) {
+      b = mid;
+    } else {
+      a = mid;
+      fa = fm;
+    }
+  }
+  return (a + b) / 2;
+}
+
+// 大運 (10-year luck pillars): direction depends on year-stem polarity + gender, start age from distance to the adjacent 節.
+function computeDayun(bazi, isMale) {
+  const yearYang = STEM_YY[bazi.year.stemIdx] === "陽";
+  const forward = yearYang && isMale || !yearYang && !isMale;
+  const {
+    jd,
+    monthIndex
+  } = bazi.meta;
+  const lowerDeg = (315 + monthIndex * 30) % 360;
+  const upperDeg = (lowerDeg + 30) % 360;
+  let diffDays;
+  if (forward) {
+    const crossJD = findLongitudeCrossing(jd, jd + 40, upperDeg);
+    diffDays = crossJD - jd;
+  } else {
+    const crossJD = findLongitudeCrossing(jd - 40, jd, lowerDeg);
+    diffDays = jd - crossJD;
+  }
+  const totalMonths = Math.max(0, Math.round(diffDays / 3 * 12));
+  const startYears = Math.floor(totalMonths / 12);
+  const startMonths = totalMonths % 12;
+  const startAgeDecimal = totalMonths / 12;
+  const periods = [];
+  const step = forward ? 1 : -1;
+  for (let i = 0; i < 8; i++) {
+    const stemIdx = ((bazi.month.stemIdx + step * (i + 1)) % 10 + 10) % 10;
+    const branchIdx = ((bazi.month.branchIdx + step * (i + 1)) % 12 + 12) % 12;
+    periods.push({
+      stemIdx,
+      branchIdx,
+      startAge: Math.round(startAgeDecimal + i * 10),
+      endAge: Math.round(startAgeDecimal + i * 10 + 9)
+    });
+  }
+  return {
+    forward,
+    startYears,
+    startMonths,
+    periods
+  };
+}
+function pillarLabel(p) {
+  if (!p) return "—";
+  return STEMS[p.stemIdx] + BRANCHES[p.branchIdx];
+}
+function tenGod(dayMasterIdx, otherStemIdx) {
+  if (dayMasterIdx === otherStemIdx) return "比肩";
+  const dmEl = STEM_ELEMENT[dayMasterIdx],
+    dmYY = STEM_YY[dayMasterIdx];
+  const otEl = STEM_ELEMENT[otherStemIdx],
+    otYY = STEM_YY[otherStemIdx];
+  const same = dmYY === otYY;
+  if (otEl === dmEl) return same ? "比肩" : "劫財";
+  if (GENERATES[dmEl] === otEl) return same ? "食神" : "傷官";
+  if (GENERATES[otEl] === dmEl) return same ? "偏印" : "正印";
+  if (OVERCOMES[dmEl] === otEl) return same ? "偏財" : "正財";
+  if (OVERCOMES[otEl] === dmEl) return same ? "七殺" : "正官";
+  return "比肩";
+}
+const TEN_GOD_INFO = {
+  比肩: {
+    tag: "同輩助力",
+    desc: "與日主同氣同性，象徵平輩、朋友、競爭與自主行動的力量。"
+  },
+  劫財: {
+    tag: "耗財變動",
+    desc: "與日主同氣異性，象徵破財、競爭與意外變數，行事宜留一手。"
+  },
+  食神: {
+    tag: "才華表現",
+    desc: "日主所生、同性，象徵才華、口福、創作與悠然自得。"
+  },
+  傷官: {
+    tag: "銳氣多言",
+    desc: "日主所生、異性，象徵聰明善辯但易招是非，宜謹言慎行。"
+  },
+  偏財: {
+    tag: "橫財機緣",
+    desc: "日主所剋、同性，象徵意外之財、應酬與投資機會。"
+  },
+  正財: {
+    tag: "穩健收成",
+    desc: "日主所剋、異性，象徵正當收入、務實與感情的穩定。"
+  },
+  七殺: {
+    tag: "壓力挑戰",
+    desc: "剋日主、同性，象徵壓力、競爭與需要當機立斷的處境。"
+  },
+  正官: {
+    tag: "秩序責任",
+    desc: "剋日主、異性，象徵責任、名譽、規範與貴人提攜。"
+  },
+  偏印: {
+    tag: "獨到靈感",
+    desc: "生日主、同性，象徵直覺、獨處與非常規的思路。"
+  },
+  正印: {
+    tag: "貴人庇蔭",
+    desc: "生日主、異性，象徵長輩助力、學習與文書契約的順遂。"
+  }
+};
+const ADVICE = {
+  比肩: {
+    yi: ["獨立行動", "運動健身", "與朋友聚會"],
+    ji: ["借貸", "合夥出資"]
+  },
+  劫財: {
+    yi: ["低調行事", "整理財務"],
+    ji: ["借出財物", "衝動消費", "賭博投機"]
+  },
+  食神: {
+    yi: ["美食聚餐", "創作發想", "休閒放鬆"],
+    ji: ["過度飲食", "熬夜"]
+  },
+  傷官: {
+    yi: ["藝術表達", "獨立作業"],
+    ji: ["與人爭論", "簽署重要文件", "衝動發言"]
+  },
+  偏財: {
+    yi: ["拓展人脈", "小額投資嘗試"],
+    ji: ["大額投機", "借貸擴張"]
+  },
+  正財: {
+    yi: ["理財規劃", "簽訂合約", "務實工作"],
+    ji: ["非份之財", "冒進投資"]
+  },
+  七殺: {
+    yi: ["果斷決策", "處理棘手事務"],
+    ji: ["硬碰硬對抗", "簽新合約", "遠行"]
+  },
+  正官: {
+    yi: ["面試求職", "公務洽談", "拜訪長輩"],
+    ji: ["投機", "違反規範"]
+  },
+  偏印: {
+    yi: ["獨處思考", "研究學習", "靈感創作"],
+    ji: ["公開發表", "過度社交"]
+  },
+  正印: {
+    yi: ["進修學習", "簽約簽名", "尋求貴人協助"],
+    ji: ["懶散拖延"]
+  }
+};
+
+// 性格特質：依日主天干
+const PERSONALITY = {
+  甲: "你的日主是甲木，個性正直、積極向上，像大樹一樣有主見、重原則，天生具有領導欲望與開創精神。優點是行動力強、責任感重，做事有計畫；缺點是有時較固執、不擅妥協，容易因堅持己見而與人起衝突。建議在人際互動中多留一點彈性，成長空間會更寬廣。",
+  乙: "你的日主是乙木，性格柔軟細膩、應變能力強，像藤蔓一樣懂得順勢而為、隨遇而安。優點是善於溝通、人緣佳、審美與感受力細膩；缺點是意志力容易搖擺，遇到壓力時容易依賴他人。建議培養獨立決斷的習慣，會讓你更有安全感。",
+  丙: "你的日主是丙火，性格熱情開朗、光明磊落，像太陽一樣充滿活力與感染力，天生擅長帶動氣氛、照顧他人。優點是慷慨大方、樂觀進取；缺點是情緒來得快去得也快，有時做事欠缺耐心與持久力。建議凡事多沉澱思考，能讓你的光芒走得更長遠。",
+  丁: "你的日主是丁火，性格細膩溫暖、心思敏銳，像燭火一樣溫柔而專注，重視精神層面與內在感受。優點是體貼細心、直覺力強；缺點是容易多愁善感、想太多而內耗。建議適時傾訴、避免長期壓抑情緒，會活得更輕盈自在。",
+  戊: "你的日主是戊土，性格穩重踏實、值得信賴，像高山一樣厚重包容，具有強烈的責任感與耐力。優點是誠信可靠、做事有始有終；缺點是有時反應較慢、不擅表達內心想法，容易顯得固執保守。建議多嘗試表達自己的情感與需求，人際關係會更順暢。",
+  己: "你的日主是己土，性格溫和細心、善於照顧他人，像田地一樣默默滋養萬物，重視和諧與實際效益。優點是心思縝密、包容力強；缺點是容易過度遷就他人而委屈自己，缺乏主見。建議練習適度表達立場，別把所有事都攬在自己身上。",
+  庚: "你的日主是庚金，性格剛毅果決、講義氣重原則，像刀劍一樣鋒利分明，行事乾脆不拖泥帶水。優點是意志堅定、正義感強；缺點是說話直接容易傷人，人際上偶爾顯得強勢。建議溝通時多一分柔軟，會讓你的果斷更受人欣賞。",
+  辛: "你的日主是辛金，性格細緻敏感、追求完美，像珠玉一樣講究質感與品味，對自己與他人要求都高。優點是審美獨到、做事精緻；缺點是容易鑽牛角尖、對批評較敏感。建議放寬對自己與他人的標準，會活得更自在從容。",
+  壬: "你的日主是壬水，性格聰明靈活、見多識廣，像江河一樣包容多變，善於應對各種局面與人際場合。優點是反應快、格局大、適應力強；缺點是有時容易三心二意、缺乏定性。建議設定明確目標並堅持到底，成就會更加可觀。",
+  癸: "你的日主是癸水，性格內斂深沉、直覺敏銳，像雨露一樣潤物無聲，善於觀察與體察他人心思。優點是心思細膩、洞察力強；缺點是容易想太多、缺乏安全感而過度謹慎。建議培養對他人與世界多一點信任，人生會更加開闊。"
+};
+
+// 五行對應器官／健康提醒
+const HEALTH_MAP = {
+  木: "肝膽、筋骨、自律神經",
+  火: "心臟、血液循環、精神狀態",
+  土: "脾胃、消化系統、肌肉",
+  金: "肺部、呼吸系統、皮膚",
+  水: "腎臟、泌尿系統、內分泌"
+};
+
+// 各面向的五行原理深入解說（展開時顯示）
+const CATEGORY_DEEPDIVE = {
+  overall: "整體運勢的判斷，是綜合當日／當年干支對你日主形成的十神關係，加上該五行在你命局中是偏強還是偏弱來評估。當補進的五行剛好是你命局欠缺的一環，通常代表運勢有加分效果；反之若疊加在已經過旺的五行上，則容易物極必反，宜適度節制。",
+  wealth: "財運主要看「財星」——也就是日主所剋的五行。正財代表穩定務實的收入與理財成果，偏財則偏向意外之財、投資或業外收穫。若當日／當年出現比肩、劫財這類與日主同氣的十神，則容易有破財、外借或衝動花費的傾向，理財上宜更謹慎。",
+  career: "工作運主要參考「官殺」（剋制日主的五行，代表規範與責任）與「食傷」（日主所生的五行，代表才華與表現）。正官、正印出現時利於升遷、簽約與貴人提攜；食神、傷官則利於發揮創意與專業表現，但傷官過旺時也容易因言語鋒芒而生是非。",
+  romance: "桃花運的判斷結合了兩個層面：一是命理上的「桃花星」（依你日支或年支對應的三合局計算，子午卯酉四支為桃花位），二是財星、官星這類代表異性緣與吸引力的十神。桃花出現時，你在人際互動中會更容易被留意到，但也要留意是否只是社交熱絡、而非真正深刻的緣分。",
+  social: "人際關係主要看比肩（同輩、朋友）與食神、正印（表達與貴人）這類十神是否活躍，同時也要看當日／當年地支與你的日支是相合還是相沖——相合利於合作與人和，相沖則容易因誤會或立場不同而起摩擦，凡事多一分耐心會化解不少衝突。",
+  health: "健康運會參考你命局中五行是否失衡：五行缺乏或過旺的部位，往往是體質上需要長期留意的環節（如木對應肝膽筋骨、火對應心血管、土對應脾胃、金對應肺部呼吸、水對應腎臟泌尿）。當日／當年五行氣如果進一步削弱你原本就偏弱的一環，宜多加保養；如果是補強偏弱五行，則有助身心調和。",
+  study: "學業與貴人運主要看「印星」（生日主的五行，代表長輩、文書、學習資源）與「正官」（代表規範與考核）是否活躍。印星旺時利於進修、考證、簽約，容易遇到願意指導你的貴人；七殺、傷官旺時則容易與師長或體制產生摩擦，需要多一點耐心與溝通。"
+};
+
+/* ============================================================
+   五行統計、身強身弱、用神喜忌
+   ============================================================ */
+function elementCounts(bazi) {
+  const counts = {
+    木: 0,
+    火: 0,
+    土: 0,
+    金: 0,
+    水: 0
+  };
+  const pillars = [bazi.year, bazi.month, bazi.day, bazi.hour].filter(Boolean);
+  pillars.forEach(p => {
+    counts[STEM_ELEMENT[p.stemIdx]]++;
+    counts[BRANCH_ELEMENT[p.branchIdx]]++;
+  });
+  return counts;
+}
+
+// 簡化版「身強身弱」與用神喜忌判斷（扶抑法）：僅供參考，非嚴謹排盤的完整用神推算
+function analyzeStrength(bazi) {
+  const dmEl = STEM_ELEMENT[bazi.day.stemIdx];
+  const pillars = [bazi.year, bazi.month, bazi.day, bazi.hour].filter(Boolean);
+  let supportive = 0,
+    total = 0;
+  pillars.forEach(p => {
+    [STEM_ELEMENT[p.stemIdx], BRANCH_ELEMENT[p.branchIdx]].forEach(el => {
+      total++;
+      if (el === dmEl || GENERATES[el] === dmEl) supportive++;
+    });
+  });
+  // 日主本身的天干不計入他生支持（已是自己），修正一次
+  total -= 1;
+  supportive -= 1;
+  const ratio = supportive / total;
+  const strong = ratio >= 0.45;
+  const outputEl = GENERATES[dmEl]; // 食傷
+  const wealthEl = OVERCOMES[dmEl]; // 財
+  const officerEl = Object.keys(OVERCOMES).find(k => OVERCOMES[k] === dmEl); // 官殺
+  const resourceEl = Object.keys(GENERATES).find(k => GENERATES[k] === dmEl); // 印
+
+  const favorable = strong ? [outputEl, wealthEl, officerEl] : [dmEl, resourceEl];
+  const unfavorable = strong ? [dmEl, resourceEl] : [outputEl, wealthEl, officerEl];
+  return {
+    strong,
+    ratio,
+    favorable,
+    unfavorable,
+    dmEl
+  };
+}
+
+/* ============================================================
+   通用「某一干支對日主」運勢產生器（可用於流日，也可用於流年）
+   ============================================================ */
+function buildPeriodFortune(bazi, targetStemIdx, targetBranchIdx, unit) {
+  const target = {
+    stemIdx: targetStemIdx,
+    branchIdx: targetBranchIdx
+  };
+  const dayMaster = bazi.day.stemIdx;
+  const god = tenGod(dayMaster, target.stemIdx);
+  const info = TEN_GOD_INFO[god];
+  const advice = ADVICE[god];
+  const birthDayBranch = bazi.day.branchIdx;
+  const isCombo = COMBO[birthDayBranch] === target.branchIdx;
+  const isClash = CLASH[birthDayBranch] === target.branchIdx;
+  const peach = peachBlossomBranch(birthDayBranch) === target.branchIdx || peachBlossomBranch(bazi.year.branchIdx) === target.branchIdx;
+  const counts = elementCounts(bazi);
+  const targetElement = STEM_ELEMENT[target.stemIdx];
+  const isLacking = counts[targetElement] <= 1;
+  const isDominant = counts[targetElement] >= 4;
+  const strength = analyzeStrength(bazi);
+  const isFavorable = strength.favorable.includes(targetElement);
+  const isUnfavorable = strength.unfavorable.includes(targetElement) && !isFavorable;
+  const scores = {};
+  let overall = 3;
+  if (["正印", "正官", "食神", "正財"].includes(god)) overall += 1;
+  if (["七殺", "傷官", "劫財"].includes(god)) overall -= 1;
+  if (isFavorable) overall += 1;else if (isUnfavorable) overall -= 1;
+  if (isClash) overall -= 1;
+  if (isCombo) overall += 1;
+  scores.overall = Math.max(1, Math.min(5, overall));
+  let wealth = 3;
+  if (god === "正財") wealth += 2;else if (god === "偏財") wealth += 1;else if (god === "劫財") wealth -= 2;else if (god === "比肩") wealth -= 1;
+  if (isClash) wealth -= 1;
+  scores.wealth = Math.max(1, Math.min(5, wealth));
+  let career = 3;
+  if (["正官", "正印"].includes(god)) career += 2;else if (["食神", "偏印"].includes(god)) career += 1;else if (god === "七殺") career -= 1;else if (god === "傷官") career -= 1;
+  if (isCombo) career += 1;
+  scores.career = Math.max(1, Math.min(5, career));
+  let romance = 3;
+  if (peach) romance += 2;
+  if (["正財", "正官"].includes(god)) romance += 1;
+  if (god === "七殺" || god === "傷官") romance -= 1;
+  if (isClash) romance -= 1;
+  scores.romance = Math.max(1, Math.min(5, romance));
+  let social = 3;
+  if (["食神", "正印"].includes(god)) social += 2;
+  if (god === "比肩") social += 1;
+  if (["七殺", "傷官", "劫財"].includes(god)) social -= 1;
+  if (isClash) social -= 2;
+  if (isCombo) social += 1;
+  scores.social = Math.max(1, Math.min(5, social));
+  let health = 3;
+  const weakestEl = Object.entries(counts).sort((a, b) => a[1] - b[1])[0][0];
+  if (targetElement === weakestEl) health += 1;
+  if (OVERCOMES[targetElement] === weakestEl) health -= 2;
+  if (isClash) health -= 1;
+  if (isCombo) health += 1;
+  scores.health = Math.max(1, Math.min(5, health));
+  let study = 3;
+  if (["正印", "偏印", "正官"].includes(god)) study += 2;
+  if (god === "傷官" || god === "七殺") study -= 1;
+  if (isCombo) study += 1;
+  scores.study = Math.max(1, Math.min(5, study));
+  const yi = new Set(advice.yi);
+  const ji = new Set(advice.ji);
+  if (isCombo) yi.add("簽約合作");
+  if (isClash) {
+    ji.add("遠行");
+    ji.add("重大決策");
+    yi.add("靜心休養");
+  }
+  if (peach) yi.add("社交聯誼");
+  const elementNote = isFavorable ? `這${unit}「${targetElement}」氣屬於你命局的喜用五行，有助整體氣場走向平衡，是相對加分的一${unit}。` : isUnfavorable ? `這${unit}「${targetElement}」氣與你命局判定的忌神方向相同，容易放大原本的失衡，宜適度節制、避免躁進。` : `這${unit}「${targetElement}」氣與你命局五行大致平和，沒有特別明顯的助力或阻力。`;
+  const comboNote = isClash ? `此外，這${unit}地支與你的日支形成「相沖」，情緒與計畫都較容易生變，重要決定建議多預留緩衝與備案。` : isCombo ? `此外，這${unit}地支與你的日支形成「相合」，人際、合作與協調類的事務會走得比較順。` : "";
+  return {
+    target,
+    god,
+    info,
+    scores,
+    yi: Array.from(yi).slice(0, 4),
+    ji: Array.from(ji).slice(0, 4),
+    isCombo,
+    isClash,
+    peach,
+    isFavorable,
+    isUnfavorable,
+    elementNote,
+    comboNote,
+    weakestElement: weakestEl
+  };
+}
+const CATEGORY_META = [{
+  key: "overall",
+  label: "整體運勢",
+  icon: Sparkles
+}, {
+  key: "wealth",
+  label: "財運",
+  icon: Coins
+}, {
+  key: "career",
+  label: "工作運",
+  icon: Briefcase
+}, {
+  key: "romance",
+  label: "桃花運",
+  icon: Heart
+}, {
+  key: "social",
+  label: "人際關係",
+  icon: HeartHandshake
+}, {
+  key: "health",
+  label: "健康運",
+  icon: HeartPulse
+}, {
+  key: "study",
+  label: "學業貴人",
+  icon: GraduationCap
+}];
+const SCORE_TONE = {
+  overall: ["諸事保守，宜靜不宜動。", "略顯平淡，順其自然即可。", "運勢平穩如常。", "運勢順遂，值得積極把握。", "氣勢極佳，適合大膽出擊。"],
+  wealth: ["財來財去，理財上要格外謹慎。", "收支大致持平。", "財運穩定，量入為出即可。", "偏財略有機會，可留意周邊訊息。", "財星高照，是進取與談合作的好時機。"],
+  career: ["進度容易拖延，宜先守成再求突破。", "工作步調平緩，按部就班。", "表現穩健，可穩步推進手邊計畫。", "有貴人相助，適合主動爭取機會。", "表現亮眼，適合展現實力、爭取曝光。"],
+  romance: ["感情能量偏低，適合獨處沉澱。", "感情面平淡無波。", "關係穩定，維持現有步調即可。", "桃花微動，多留意身邊互動對象。", "桃花旺盛，適合主動表達心意或邀約。"],
+  social: ["人際上容易有口角，建議先退一步。", "人際互動平平，沒有特別波動。", "與人相處和睦，氣氛融洽。", "人緣加分，適合安排聚會或社交場合。", "貴人雲集、人氣旺盛，適合拓展人脈。"],
+  health: ["身體訊號較弱，宜多休息、避免硬撐。", "健康狀況平穩，維持regular作息即可。", "體力與精神狀態中等，量力而為。", "精神狀態不錯，適合安排運動或調養。", "氣血通暢，是調整體質、養成好習慣的好時機。"],
+  study: ["學習或考核運偏弱，宜先複習基礎、避免躁進。", "學業表現平平，按進度前進即可。", "學習狀態穩定，吸收力中等。", "貴人運不錯，適合請益師長或前輩。", "文書、考試、進修運都旺，適合把握機會。"]
+};
+
+/* ============================================================
+   小工具 UI helpers
+   ============================================================ */
+function StarScore({
+  score
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 2
+    }
+  }, [1, 2, 3, 4, 5].map(i => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      width: 6,
+      height: 6,
+      borderRadius: "50%",
+      background: i <= score ? "#b3492b" : "rgba(58,50,38,0.12)"
+    }
+  })));
+}
+function ElementTag({
+  el,
+  small
+}) {
+  const c = EL[el];
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: c.color,
+      background: c.bg,
+      borderRadius: 999,
+      padding: small ? "1px 7px" : "2px 9px",
+      fontSize: small ? 11 : 12,
+      fontWeight: 600,
+      letterSpacing: 1
+    }
+  }, el);
+}
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function shiftISO(iso, delta) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+function formatCN(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const wk = ["日", "一", "二", "三", "四", "五", "六"][new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${y}年${m}月${d}日 星期${wk}`;
+}
+
+/* ============================================================
+   儲存輔助：window.storage 失敗時退回記憶體快取，當次瀏覽仍可正常使用
+   ============================================================ */
+// 獨立版：改用瀏覽器 localStorage，不需要 Claude 帳號登入，任何人打開連結即可直接使用
+async function safeStorageGet(key) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+async function safeStorageSet(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* ============================================================
+   MAIN APP
+   ============================================================ */
+export default function BaziApp() {
+  const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [viewDate, setViewDate] = useState(todayISO());
+  const [viewYear, setViewYear] = useState(new Date().getFullYear());
+  const [tab, setTab] = useState("day"); // "day" | "year" | "dayun"
+  const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState(null); // category detail expand
+
+  useEffect(() => {
+    (async () => {
+      const list = (await safeStorageGet("bazi-profiles")) || [];
+      setProfiles(list);
+      const settings = (await safeStorageGet("bazi-settings")) || {};
+      if (settings.activeProfileId && list.some(x => x.id === settings.activeProfileId)) {
+        setActiveId(settings.activeProfileId);
+      } else if (list.length) {
+        setActiveId(list[0].id);
+      }
+      setLoading(false);
+    })();
+  }, []);
+  const persistProfiles = useCallback(async list => {
+    setProfiles(list);
+    const ok = await safeStorageSet("bazi-profiles", list);
+    setError(ok ? "" : "目前無法永久保存資料，但這次瀏覽期間仍可正常使用（重新整理頁面後才會遺失）。");
+  }, []);
+  const persistSettings = useCallback(async patch => {
+    const cur = (await safeStorageGet("bazi-settings")) || {};
+    await safeStorageSet("bazi-settings", {
+      ...cur,
+      ...patch
+    });
+  }, []);
+  const addProfile = async profile => {
+    const list = [...profiles, profile];
+    await persistProfiles(list);
+    setActiveId(profile.id);
+    persistSettings({
+      activeProfileId: profile.id
+    });
+    setShowForm(false);
+  };
+  const deleteProfile = async id => {
+    const list = profiles.filter(p => p.id !== id);
+    await persistProfiles(list);
+    if (activeId === id) {
+      const next = list[0]?.id ?? null;
+      setActiveId(next);
+      persistSettings({
+        activeProfileId: next
+      });
+    }
+  };
+  const selectProfile = id => {
+    setActiveId(id);
+    setExpanded(null);
+    persistSettings({
+      activeProfileId: id
+    });
+  };
+  const active = profiles.find(p => p.id === activeId) || null;
+  const bazi = useMemo(() => {
+    if (!active) return null;
+    return computeBazi(active.birth.y, active.birth.m, active.birth.d, active.hasTime ? active.birth.h : null, active.hasTime ? active.birth.min : 0);
+  }, [active]);
+  const strength = useMemo(() => bazi ? analyzeStrength(bazi) : null, [bazi]);
+  const dayFortune = useMemo(() => {
+    if (!bazi) return null;
+    const [y, m, d] = viewDate.split("-").map(Number);
+    const jdn = toJDN(y, m, d);
+    const today = dayGanZhiFromJDN(jdn);
+    return buildPeriodFortune(bazi, today.stemIdx, today.branchIdx, "日");
+  }, [bazi, viewDate]);
+  const yearFortune = useMemo(() => {
+    if (!bazi) return null;
+    const yearStemIdx = ((viewYear - 4) % 10 + 10) % 10;
+    const yearBranchIdx = ((viewYear - 4) % 12 + 12) % 12;
+    return buildPeriodFortune(bazi, yearStemIdx, yearBranchIdx, "年");
+  }, [bazi, viewYear]);
+  const dayun = useMemo(() => {
+    if (!bazi || !active) return null;
+    return computeDayun(bazi, active.gender !== "female");
+  }, [bazi, active]);
+  if (loading) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: styles.page
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%",
+        color: "#8A8272"
+      }
+    }, /*#__PURE__*/React.createElement(Loader2, {
+      size: 20,
+      style: {
+        animation: "spin 1s linear infinite",
+        marginRight: 8
+      }
+    }), "載入中…"), /*#__PURE__*/React.createElement("style", null, `@keyframes spin{to{transform:rotate(360deg)}}`));
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.page
+  }, /*#__PURE__*/React.createElement("style", null, `
+        * { box-sizing: border-box; }
+        input[type="date"], input[type="time"] { color-scheme: light; }
+        button { font-family: inherit; cursor: pointer; }
+        ::-webkit-scrollbar { display: none; }
+      `), /*#__PURE__*/React.createElement("header", {
+    style: styles.header
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.brandEyebrow
+  }, "命理 · 全方位運勢"), /*#__PURE__*/React.createElement("div", {
+    style: styles.brandTitle
+  }, "八字命盤")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowForm(true),
+    style: styles.addBtn
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 16
+  }), " 新增")), profiles.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: styles.profileRow
+  }, profiles.map(p => /*#__PURE__*/React.createElement("button", {
+    key: p.id,
+    onClick: () => selectProfile(p.id),
+    style: {
+      ...styles.profileChip,
+      ...(p.id === activeId ? styles.profileChipActive : {})
+    }
+  }, p.isSelf ? /*#__PURE__*/React.createElement(User, {
+    size: 13
+  }) : /*#__PURE__*/React.createElement(Users, {
+    size: 13
+  }), p.name))), error && /*#__PURE__*/React.createElement("div", {
+    style: styles.errorBanner
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setError(""),
+    style: styles.errorDismiss
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 13
+  }))), !active && /*#__PURE__*/React.createElement(EmptyState, {
+    onAdd: () => setShowForm(true)
+  }), active && bazi && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(BaziCard, {
+    profile: active,
+    bazi: bazi,
+    strength: strength,
+    onDelete: () => deleteProfile(active.id)
+  }), /*#__PURE__*/React.createElement("div", {
+    style: styles.tabBar
+  }, [{
+    key: "day",
+    label: "流日運勢"
+  }, {
+    key: "year",
+    label: "流年運勢"
+  }, {
+    key: "dayun",
+    label: "大運"
+  }].map(t => /*#__PURE__*/React.createElement("button", {
+    key: t.key,
+    onClick: () => {
+      setTab(t.key);
+      setExpanded(null);
+    },
+    style: {
+      ...styles.tabBtn,
+      ...(tab === t.key ? styles.tabBtnActive : {})
+    }
+  }, t.label))), tab === "day" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DateSwitcher, {
+    viewDate: viewDate,
+    setViewDate: setViewDate
+  }), dayFortune && /*#__PURE__*/React.createElement(FortuneSection, {
+    fortune: dayFortune,
+    unit: "日",
+    expanded: expanded,
+    setExpanded: setExpanded
+  })), tab === "year" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(YearSwitcher, {
+    viewYear: viewYear,
+    setViewYear: setViewYear
+  }), yearFortune && /*#__PURE__*/React.createElement(FortuneSection, {
+    fortune: yearFortune,
+    unit: "年",
+    expanded: expanded,
+    setExpanded: setExpanded
+  })), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(DayunSection, {
+    dayun: dayun,
+    bazi: bazi,
+    birthYear: active.birth.y
+  })), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
+    existingHasSelf: profiles.some(p => p.isSelf),
+    onCancel: () => setShowForm(false),
+    onSave: addProfile
+  }));
+}
+
+/* ---------------- Empty state ---------------- */
+function EmptyState({
+  onAdd
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.empty
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.emptySeal
+  }, "命"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 600,
+      marginBottom: 6
+    }
+  }, "還沒有任何命盤"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#8A8272",
+      marginBottom: 20,
+      lineHeight: 1.6
+    }
+  }, "輸入你的出生日期，排出專屬八字，", /*#__PURE__*/React.createElement("br", null), "查看每日流年運勢與宜忌。"), /*#__PURE__*/React.createElement("button", {
+    onClick: onAdd,
+    style: styles.primaryBtn
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 16
+  }), " 建立我的八字"));
+}
+
+/* ---------------- BaZi tablet card ---------------- */
+function BaziCard({
+  profile,
+  bazi,
+  strength,
+  onDelete
+}) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const pillars = [{
+    label: "年柱",
+    p: bazi.year
+  }, {
+    label: "月柱",
+    p: bazi.month
+  }, {
+    label: "日柱",
+    p: bazi.day,
+    isDayMaster: true
+  }, {
+    label: "時柱",
+    p: bazi.hour
+  }];
+  const counts = elementCounts(bazi);
+  const maxCount = Math.max(1, ...Object.values(counts));
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#8A8272"
+    }
+  }, profile.name, " · ", profile.birth.y, "/", profile.birth.m, "/", profile.birth.d, profile.hasTime ? ` ${String(profile.birth.h).padStart(2, "0")}:${String(profile.birth.min).padStart(2, "0")}` : "（未知時辰）", "· ", bazi.ganzhiYear ? `${STEMS[bazi.year.stemIdx]}${BRANCHES[bazi.year.branchIdx]}年生` : ""), !confirmDel ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmDel(true),
+    style: styles.iconBtn
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 14
+  })) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onDelete,
+    style: {
+      ...styles.iconBtn,
+      color: "#c0524a"
+    }
+  }, "刪除"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmDel(false),
+    style: styles.iconBtn
+  }, "取消"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(4, 1fr)",
+      gap: 8
+    }
+  }, pillars.map((pl, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      ...styles.tablet,
+      borderLeft: pl.p ? `3px solid ${EL[STEM_ELEMENT[pl.p.stemIdx]].color}` : "3px solid #E2DACA"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.tabletLabel
+  }, pl.label, pl.isDayMaster && /*#__PURE__*/React.createElement("span", {
+    style: styles.dayMasterDot
+  })), pl.p ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.tabletChar,
+      color: EL[STEM_ELEMENT[pl.p.stemIdx]].color
+    }
+  }, STEMS[pl.p.stemIdx]), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.tabletChar,
+      color: EL[BRANCH_ELEMENT[pl.p.branchIdx]].color
+    }
+  }, BRANCHES[pl.p.branchIdx]), /*#__PURE__*/React.createElement("div", {
+    style: styles.tabletSub
+  }, STEM_ELEMENT[pl.p.stemIdx], BRANCH_ELEMENT[pl.p.branchIdx])) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.tabletChar,
+      color: "#B3A78E",
+      fontSize: 13,
+      marginTop: 18
+    }
+  }, "未知")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#8A8272",
+      marginBottom: 6
+    }
+  }, "五行分布"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, Object.entries(counts).map(([el, n]) => /*#__PURE__*/React.createElement("div", {
+    key: el,
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      fontSize: 10,
+      color: EL[el].color,
+      marginBottom: 3
+    }
+  }, /*#__PURE__*/React.createElement("span", null, el), /*#__PURE__*/React.createElement("span", null, n)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 5,
+      borderRadius: 3,
+      background: "rgba(58,50,38,0.08)",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: `${n / maxCount * 100}%`,
+      height: "100%",
+      background: EL[el].color
+    }
+  })))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#A79C86",
+      marginTop: 10
+    }
+  }, "日主（你）為 ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: EL[STEM_ELEMENT[bazi.day.stemIdx]].color
+    }
+  }, STEMS[bazi.day.stemIdx], STEM_ELEMENT[bazi.day.stemIdx]), "，以下運勢皆以日主為核心推算。"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowMore(v => !v),
+    style: styles.moreToggle
+  }, showMore ? "收起性格與用神分析" : "查看性格特質與用神喜忌", showMore ? /*#__PURE__*/React.createElement(ChevronUp, {
+    size: 13
+  }) : /*#__PURE__*/React.createElement(ChevronDown, {
+    size: 13
+  })), showMore && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "性格特質"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, PERSONALITY[STEMS[bazi.day.stemIdx]])), strength && /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "用神喜忌（簡化分析）"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "從命局中支持日主（同類五行＋生助五行）的比例來看，你的命局偏向「", strength.strong ? "身強" : "身弱", "」。", strength.strong ? "身強者宜洩、宜剋，代表消耗與制衡日主的五行對你較有利，能幫助你把過旺的能量導向具體成果。" : "身弱者宜生、宜扶，代表滋養與強化日主的五行對你較有利，能補足你原本較欠缺的支持力量。"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap",
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: styles.yongshenLabel
+  }, "喜用："), [...new Set(strength.favorable)].map(el => /*#__PURE__*/React.createElement(ElementTag, {
+    key: el,
+    el: el,
+    small: true
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexWrap: "wrap",
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: styles.yongshenLabel
+  }, "忌用："), [...new Set(strength.unfavorable)].map(el => /*#__PURE__*/React.createElement(ElementTag, {
+    key: el,
+    el: el,
+    small: true
+  }))), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8,
+      fontSize: 11,
+      color: "#A79C86"
+    }
+  }, "此為簡化的「扶抑」判斷法，實際專業論命還會考慮月令、通關、調候等更多因素，僅供日常參考。"))));
+}
+
+/* ---------------- Date / Year switchers ---------------- */
+function DateSwitcher({
+  viewDate,
+  setViewDate
+}) {
+  const isToday = viewDate === todayISO();
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.dateSwitcher
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewDate(shiftISO(viewDate, -1)),
+    style: styles.dateArrow
+  }, /*#__PURE__*/React.createElement(ChevronLeft, {
+    size: 18
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      position: "relative",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(CalendarIcon, {
+    size: 13,
+    color: "#8A8272"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600
+    }
+  }, formatCN(viewDate)), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: viewDate,
+    onChange: e => e.target.value && setViewDate(e.target.value),
+    style: {
+      position: "absolute",
+      inset: 0,
+      opacity: 0,
+      width: "100%",
+      cursor: "pointer"
+    }
+  })), !isToday && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewDate(todayISO()),
+    style: styles.todayBtn
+  }, "回到今天"))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewDate(shiftISO(viewDate, 1)),
+    style: styles.dateArrow
+  }, /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 18
+  })));
+}
+function YearSwitcher({
+  viewYear,
+  setViewYear
+}) {
+  const thisYear = new Date().getFullYear();
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.dateSwitcher
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewYear(viewYear - 1),
+    style: styles.dateArrow
+  }, /*#__PURE__*/React.createElement(ChevronLeft, {
+    size: 18
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement(CalendarIcon, {
+    size: 13,
+    color: "#8A8272"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      fontWeight: 600
+    }
+  }, viewYear, " 年")), viewYear !== thisYear && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewYear(thisYear),
+    style: styles.todayBtn
+  }, "回到今年"))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewYear(viewYear + 1),
+    style: styles.dateArrow
+  }, /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 18
+  })));
+}
+
+/* ---------------- Fortune section (works for both 流日 / 流年) ---------------- */
+function FortuneSection({
+  fortune,
+  unit,
+  expanded,
+  setExpanded
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.dayPillarBanner
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.bannerEyebrow
+  }, unit === "日" ? "當日干支" : "當年干支"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      letterSpacing: 2
+    }
+  }, STEMS[fortune.target.stemIdx], BRANCHES[fortune.target.branchIdx], /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#8a8272",
+      marginLeft: 8,
+      fontWeight: 400
+    }
+  }, "屬", BRANCH_ANIMAL[fortune.target.branchIdx], unit))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bannerEyebrow
+  }, "對你而言"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: "#b3492b"
+    }
+  }, fortune.god, " · ", fortune.info.tag))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      marginTop: 10
+    }
+  }, CATEGORY_META.map(({
+    key,
+    label,
+    icon: Icon
+  }) => {
+    const score = fortune.scores[key];
+    const isOpen = expanded === key;
+    const summary = [SCORE_TONE[key][score - 1], fortune.info.desc, key === "overall" || key === "health" ? fortune.elementNote : "", fortune.comboNote].filter(Boolean).join("");
+    return /*#__PURE__*/React.createElement("div", {
+      key: key,
+      style: styles.fortuneCard
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setExpanded(isOpen ? null : key),
+      style: styles.fortuneCardHead
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneIconWrap
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 15,
+      color: "#b3492b"
+    })), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneTextCol
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600,
+        marginBottom: 3
+      }
+    }, label), /*#__PURE__*/React.createElement("p", {
+      style: styles.fortuneSummary
+    }, summary)), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneScoreCol
+    }, /*#__PURE__*/React.createElement(StarScore, {
+      score: score
+    }), isOpen ? /*#__PURE__*/React.createElement(ChevronUp, {
+      size: 14,
+      color: "#8a8272"
+    }) : /*#__PURE__*/React.createElement(ChevronDown, {
+      size: 14,
+      color: "#8a8272"
+    }))), isOpen && /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneCardDetail
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, CATEGORY_DEEPDIVE[key]), key === "health" && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "依你命局中五行分布，較需長期留意的體質環節對應「", fortune.weakestElement, "」一行，即", /*#__PURE__*/React.createElement("b", null, " ", HEALTH_MAP[fortune.weakestElement]), " 這類系統。這", unit, "的五行氣如果削弱這個環節，建議多加保養；如果正好補強，則有助身心調和。此為體質傾向參考，不能取代醫療診斷。"), fortune.peach && (key === "romance" || key === "social") && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: "#A85D2E"
+      }
+    }, "這", unit, "觸動了你命局中的桃花星（依日支／年支的三合局判斷），人際互動中會更容易被留意到，是社交與展現魅力的好時機。"), fortune.isFavorable && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: "#3F7A3D"
+      }
+    }, "這", unit, "的五行氣屬於你命局判定的喜用神方向，整體而言是有助平衡、值得把握的一", unit, "。"), fortune.isUnfavorable && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: "#B14338"
+      }
+    }, "這", unit, "的五行氣落在你命局判定的忌神方向，容易放大既有的失衡，行事上宜求穩、避免躁進。")));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: styles.yijiCard
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.yijiLabel
+  }, "宜"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6
+    }
+  }, fortune.yi.map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    style: styles.yiTag
+  }, t)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.yijiLabel,
+      color: "#8A8272"
+    }
+  }, "忌"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6
+    }
+  }, fortune.ji.map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    style: styles.jiTag
+  }, t)))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#9C927C",
+      marginTop: 12,
+      lineHeight: 1.6,
+      padding: "0 2px"
+    }
+  }, "說明：出生時間預設以台灣／中國標準時間（UTC+8）計算節氣，年柱與月柱以節氣（立春等）精算，23:00–23:59（夜子時）時柱依隔日日干推算。命理分析僅供參考與自我覺察，不宜作為重大決策的唯一依據。"));
+}
+
+/* ---------------- 大運 section ---------------- */
+function DayunSection({
+  dayun,
+  bazi,
+  birthYear
+}) {
+  const [openIdx, setOpenIdx] = useState(null);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.dayPillarBanner
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.bannerEyebrow
+  }, "排運方向"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, dayun.forward ? "順行" : "逆行")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bannerEyebrow
+  }, "起運歲數"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700,
+      color: "#b3492b"
+    }
+  }, dayun.startYears, "歲", dayun.startMonths > 0 ? `${dayun.startMonths}個月` : ""))), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#6B6252",
+      lineHeight: 1.7,
+      margin: "10px 2px"
+    }
+  }, "大運每十年為一運，依你出生年干的陰陽與性別決定排運方向；每一運柱都會與日主形成新的十神關係，代表那十年整體的能量基調。點選任一運柱可展開詳細解讀。"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, dayun.periods.map((p, i) => {
+    const god = tenGod(bazi.day.stemIdx, p.stemIdx);
+    const info = TEN_GOD_INFO[god];
+    const isOpen = openIdx === i;
+    const calYearStart = birthYear + p.startAge;
+    const calYearEnd = birthYear + p.endAge;
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: styles.fortuneCard
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setOpenIdx(isOpen ? null : i),
+      style: styles.dayunHead
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...styles.dayunPillarBox,
+        borderColor: EL[STEM_ELEMENT[p.stemIdx]].color
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: EL[STEM_ELEMENT[p.stemIdx]].color
+      }
+    }, STEMS[p.stemIdx]), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: EL[BRANCH_ELEMENT[p.branchIdx]].color
+      }
+    }, BRANCHES[p.branchIdx])), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneTextCol
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600
+      }
+    }, p.startAge, "～", p.endAge, " 歲\u3000", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#A79C86",
+        fontWeight: 400
+      }
+    }, "(", calYearStart, "–", calYearEnd, ")")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#8A8272"
+      }
+    }, god, " · ", info.tag)), isOpen ? /*#__PURE__*/React.createElement(ChevronUp, {
+      size: 14,
+      color: "#8a8272"
+    }) : /*#__PURE__*/React.createElement(ChevronDown, {
+      size: 14,
+      color: "#8a8272"
+    })), isOpen && /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneCardDetail
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, info.desc), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "這十年整體以「", god, "」為主軸，", ADVICE[god].yi.length ? `較適合把握${ADVICE[god].yi.slice(0, 2).join("、")}等方向；` : "", "也要留意", ADVICE[god].ji.slice(0, 2).join("、"), "相關的風險，行運期間仍會受當年流年干支疊加影響而有起伏，此處僅呈現十年基調。")));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#9C927C",
+      marginTop: 12,
+      lineHeight: 1.6,
+      padding: "0 2px"
+    }
+  }, "說明：起運歲數以出生時刻到最近節氣的距離估算（3天≈1歲），為簡化估算值，專業排盤可能略有±1個月左右差異。"));
+}
+
+/* ---------------- Profile form ---------------- */
+function ProfileForm({
+  onCancel,
+  onSave,
+  existingHasSelf
+}) {
+  const [name, setName] = useState("");
+  const [isSelf, setIsSelf] = useState(!existingHasSelf);
+  const [gender, setGender] = useState("male");
+  const [date, setDate] = useState("");
+  const [hasTime, setHasTime] = useState(true);
+  const [time, setTime] = useState("12:00");
+  const [err, setErr] = useState("");
+  const submit = () => {
+    if (!date) {
+      setErr("請選擇出生日期");
+      return;
+    }
+    const [y, m, d] = date.split("-").map(Number);
+    let h = 12,
+      min = 0;
+    if (hasTime) {
+      if (!time) {
+        setErr("請選擇出生時間，或關閉「知道時辰」");
+        return;
+      }
+      [h, min] = time.split(":").map(Number);
+    }
+    const finalName = name.trim() || (isSelf ? "我" : `訪客 ${new Date().toLocaleDateString()}`);
+    onSave({
+      id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: finalName,
+      isSelf,
+      gender,
+      hasTime,
+      birth: {
+        y,
+        m,
+        d,
+        h,
+        min
+      },
+      createdAt: Date.now()
+    });
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.overlay
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.sheet
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "新增命盤"), /*#__PURE__*/React.createElement("button", {
+    onClick: onCancel,
+    style: styles.iconBtn
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 18
+  }))), /*#__PURE__*/React.createElement(FieldLabel, null, "模式"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(ModeBtn, {
+    active: isSelf,
+    onClick: () => setIsSelf(true),
+    icon: User,
+    label: "我自己"
+  }), /*#__PURE__*/React.createElement(ModeBtn, {
+    active: !isSelf,
+    onClick: () => setIsSelf(false),
+    icon: Users,
+    label: "訪客／他人"
+  })), /*#__PURE__*/React.createElement(FieldLabel, null, "稱呼（選填）"), /*#__PURE__*/React.createElement("input", {
+    value: name,
+    onChange: e => setName(e.target.value),
+    placeholder: isSelf ? "我" : "例如：朋友小美",
+    style: styles.input
+  }), /*#__PURE__*/React.createElement(FieldLabel, null, "性別（用於推算大運方向）"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement(ModeBtn, {
+    active: gender === "male",
+    onClick: () => setGender("male"),
+    icon: User,
+    label: "男"
+  }), /*#__PURE__*/React.createElement(ModeBtn, {
+    active: gender === "female",
+    onClick: () => setGender("female"),
+    icon: User,
+    label: "女"
+  })), /*#__PURE__*/React.createElement(FieldLabel, null, "出生日期"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: date,
+    onChange: e => setDate(e.target.value),
+    style: styles.input
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      margin: "14px 0 6px"
+    }
+  }, /*#__PURE__*/React.createElement(FieldLabel, {
+    noMargin: true
+  }, "知道確切出生時辰"), /*#__PURE__*/React.createElement(Toggle, {
+    checked: hasTime,
+    onChange: setHasTime
+  })), hasTime ? /*#__PURE__*/React.createElement("input", {
+    type: "time",
+    value: time,
+    onChange: e => setTime(e.target.value),
+    style: styles.input
+  }) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#8A8272",
+      lineHeight: 1.6
+    }
+  }, "將只排出年、月、日三柱；運勢分析仍以日主（日柱天干）為核心，準確度不受影響。"), err && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#c0524a",
+      fontSize: 12,
+      marginTop: 10
+    }
+  }, err), /*#__PURE__*/React.createElement("button", {
+    onClick: submit,
+    style: {
+      ...styles.primaryBtn,
+      width: "100%",
+      marginTop: 20
+    }
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 16
+  }), " 建立命盤")));
+}
+function ModeBtn({
+  active,
+  onClick,
+  icon: Icon,
+  label
+}) {
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    style: {
+      flex: 1,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 6,
+      padding: "12px 8px",
+      borderRadius: 12,
+      border: `1px solid ${active ? "#b3492b" : "rgba(58,50,38,0.12)"}`,
+      background: active ? "rgba(179,73,43,0.12)" : "transparent",
+      color: active ? "#A0401F" : "#4A4438"
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    size: 17
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 600
+    }
+  }, label));
+}
+function FieldLabel({
+  children,
+  noMargin
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#8A8272",
+      marginBottom: noMargin ? 0 : 6,
+      fontWeight: 600
+    }
+  }, children);
+}
+function Toggle({
+  checked,
+  onChange
+}) {
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: () => onChange(!checked),
+    style: {
+      width: 40,
+      height: 24,
+      borderRadius: 12,
+      background: checked ? "#b3492b" : "rgba(58,50,38,0.12)",
+      position: "relative",
+      border: "none",
+      transition: "background 0.2s"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 18,
+      height: 18,
+      borderRadius: "50%",
+      background: "#fff",
+      position: "absolute",
+      top: 3,
+      left: checked ? 19 : 3,
+      transition: "left 0.2s"
+    }
+  }));
+}
+
+/* ============================================================
+   styles
+   ============================================================ */
+const cardShadow = "0 1px 2px rgba(58,50,38,0.04), 0 6px 16px rgba(58,50,38,0.05)";
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#FBF8F2",
+    color: "#2B2620",
+    fontFamily: '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif',
+    padding: "16px 14px 40px",
+    maxWidth: 480,
+    margin: "0 auto"
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginBottom: 16
+  },
+  brandEyebrow: {
+    fontSize: 11,
+    color: "#b3492b",
+    fontWeight: 700,
+    letterSpacing: 2,
+    marginBottom: 2
+  },
+  brandTitle: {
+    fontSize: 22,
+    fontWeight: 800,
+    fontFamily: '"Noto Serif TC","Songti TC",serif',
+    letterSpacing: 1
+  },
+  addBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    background: "#b3492b",
+    color: "#fff",
+    border: "none",
+    borderRadius: 10,
+    padding: "8px 12px",
+    fontSize: 13,
+    fontWeight: 600
+  },
+  profileRow: {
+    display: "flex",
+    gap: 8,
+    overflowX: "auto",
+    marginBottom: 14,
+    paddingBottom: 2
+  },
+  profileChip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    whiteSpace: "nowrap",
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.10)",
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontSize: 12.5,
+    color: "#4A4438"
+  },
+  profileChipActive: {
+    background: "rgba(179,73,43,0.10)",
+    border: "1px solid #b3492b",
+    color: "#A0401F"
+  },
+  errorBanner: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "#FDEEEA",
+    border: "1px solid rgba(192,82,74,0.25)",
+    color: "#B0392A",
+    fontSize: 12,
+    padding: "8px 10px 8px 12px",
+    borderRadius: 10,
+    marginBottom: 12,
+    lineHeight: 1.5
+  },
+  errorDismiss: {
+    background: "transparent",
+    border: "none",
+    color: "#B0392A",
+    padding: 4,
+    flexShrink: 0
+  },
+  card: {
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.08)",
+    borderRadius: 16,
+    padding: 16,
+    boxShadow: cardShadow
+  },
+  tablet: {
+    background: "#FBF8F2",
+    borderRadius: 10,
+    padding: "10px 4px",
+    textAlign: "center"
+  },
+  tabletLabel: {
+    fontSize: 10,
+    color: "#A79C86",
+    marginBottom: 6,
+    position: "relative"
+  },
+  dayMasterDot: {
+    display: "inline-block",
+    width: 4,
+    height: 4,
+    borderRadius: "50%",
+    background: "#b3492b",
+    marginLeft: 4,
+    verticalAlign: "middle"
+  },
+  tabletChar: {
+    fontFamily: '"Noto Serif TC","Songti TC",serif',
+    fontSize: 24,
+    fontWeight: 700,
+    lineHeight: 1.25
+  },
+  tabletSub: {
+    fontSize: 10,
+    color: "#A79C86",
+    marginTop: 4
+  },
+  dateSwitcher: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.08)",
+    borderRadius: 14,
+    padding: "8px 6px",
+    marginTop: 14,
+    boxShadow: cardShadow
+  },
+  dateArrow: {
+    background: "transparent",
+    border: "none",
+    color: "#4A4438",
+    padding: 8,
+    borderRadius: 8
+  },
+  todayBtn: {
+    background: "none",
+    border: "none",
+    color: "#b3492b",
+    fontSize: 11,
+    marginTop: 2,
+    padding: 0
+  },
+  bannerEyebrow: {
+    fontSize: 11,
+    color: "#A0401F",
+    opacity: 0.8,
+    marginBottom: 3
+  },
+  dayPillarBanner: {
+    display: "grid",
+    gridTemplateColumns: "1fr auto",
+    alignItems: "center",
+    background: "linear-gradient(135deg, rgba(179,73,43,0.10), rgba(179,73,43,0.03))",
+    border: "1px solid rgba(179,73,43,0.22)",
+    borderRadius: 14,
+    padding: "12px 16px"
+  },
+  fortuneCard: {
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.08)",
+    borderRadius: 12,
+    overflow: "hidden",
+    boxShadow: cardShadow
+  },
+  fortuneCardHead: {
+    width: "100%",
+    display: "grid",
+    gridTemplateColumns: "30px 1fr auto",
+    alignItems: "center",
+    columnGap: 10,
+    background: "transparent",
+    border: "none",
+    padding: "12px 14px",
+    color: "#2B2620",
+    textAlign: "left"
+  },
+  fortuneTextCol: {
+    minWidth: 0
+  },
+  fortuneScoreCol: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    justifySelf: "end"
+  },
+  fortuneIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    background: "rgba(179,73,43,0.10)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0
+  },
+  fortuneCardDetail: {
+    padding: "0 14px 14px",
+    fontSize: 12.5,
+    color: "#6B6252",
+    borderTop: "1px solid rgba(58,50,38,0.07)",
+    marginTop: 2,
+    paddingTop: 10
+  },
+  fortuneSummary: {
+    fontSize: 12,
+    color: "#6B6252",
+    lineHeight: 1.6,
+    margin: 0
+  },
+  yijiCard: {
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.08)",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 8,
+    boxShadow: cardShadow
+  },
+  yijiLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#A85D2E",
+    marginBottom: 8
+  },
+  yiTag: {
+    fontSize: 11.5,
+    background: "rgba(91,140,90,0.12)",
+    color: "#3F7A3D",
+    padding: "4px 9px",
+    borderRadius: 999
+  },
+  jiTag: {
+    fontSize: 11.5,
+    background: "rgba(192,82,74,0.12)",
+    color: "#B14338",
+    padding: "4px 9px",
+    borderRadius: 999
+  },
+  tabBar: {
+    display: "flex",
+    gap: 6,
+    marginTop: 14,
+    background: "rgba(58,50,38,0.05)",
+    borderRadius: 12,
+    padding: 4
+  },
+  tabBtn: {
+    flex: 1,
+    background: "transparent",
+    border: "none",
+    borderRadius: 9,
+    padding: "8px 6px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "#8A8272"
+  },
+  tabBtnActive: {
+    background: "#FFFFFF",
+    color: "#A0401F",
+    boxShadow: "0 1px 3px rgba(58,50,38,0.10)"
+  },
+  moreToggle: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    borderTop: "1px solid rgba(58,50,38,0.07)",
+    marginTop: 12,
+    paddingTop: 10,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#A0401F"
+  },
+  subBlock: {
+    background: "#FBF8F2",
+    borderRadius: 10,
+    padding: 12
+  },
+  subBlockTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#4A4438",
+    marginBottom: 6
+  },
+  subBlockText: {
+    fontSize: 12.5,
+    color: "#6B6252",
+    lineHeight: 1.75,
+    margin: 0
+  },
+  yongshenLabel: {
+    fontSize: 11.5,
+    color: "#8A8272",
+    alignSelf: "center"
+  },
+  dayunHead: {
+    width: "100%",
+    display: "grid",
+    gridTemplateColumns: "48px 1fr auto",
+    alignItems: "center",
+    columnGap: 10,
+    background: "transparent",
+    border: "none",
+    padding: "12px 14px",
+    color: "#2B2620",
+    textAlign: "left"
+  },
+  dayunPillarBox: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    border: "1.5px solid",
+    background: "#FBF8F2",
+    fontFamily: '"Noto Serif TC","Songti TC",serif',
+    fontSize: 15,
+    fontWeight: 700,
+    lineHeight: 1.2
+  },
+  empty: {
+    textAlign: "center",
+    padding: "60px 20px"
+  },
+  emptySeal: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    border: "2px solid #b3492b",
+    color: "#b3492b",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 24,
+    fontWeight: 700,
+    fontFamily: '"Noto Serif TC",serif',
+    margin: "0 auto 18px",
+    transform: "rotate(-3deg)"
+  },
+  primaryBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    background: "#b3492b",
+    color: "#fff",
+    border: "none",
+    borderRadius: 12,
+    padding: "12px 20px",
+    fontSize: 14,
+    fontWeight: 700
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(43,38,32,0.45)",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    zIndex: 50
+  },
+  sheet: {
+    width: "100%",
+    maxWidth: 480,
+    background: "#FFFFFF",
+    borderRadius: "20px 20px 0 0",
+    padding: 20,
+    maxHeight: "88vh",
+    overflowY: "auto"
+  },
+  input: {
+    width: "100%",
+    background: "#FBF8F2",
+    border: "1px solid rgba(58,50,38,0.14)",
+    borderRadius: 10,
+    padding: "10px 12px",
+    color: "#2B2620",
+    fontSize: 14,
+    marginBottom: 4
+  },
+  iconBtn: {
+    background: "transparent",
+    border: "none",
+    color: "#8A8272",
+    padding: 6,
+    borderRadius: 8,
+    fontSize: 12
+  }
+};
+const root = createRoot(document.getElementById("root"));
+root.render(/*#__PURE__*/React.createElement(BaziApp, null));
+</script>
+</body>
+</html>
