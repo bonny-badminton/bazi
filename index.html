@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>八字命盤</title>
+<title>八字命盤 ‧ 星座命盤</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="八字命盤">
@@ -19,6 +19,7 @@
 </style>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/astronomy-engine@2.1.19/astronomy.browser.min.js" crossorigin></script>
 </head>
 <body>
 <div id="root"><div id="boot-fallback">載入中…</div></div>
@@ -699,6 +700,307 @@ function pillarLabel(p) {
   if (!p) return "—";
   return STEMS[p.stemIdx] + BRANCHES[p.branchIdx];
 }
+
+/* ============================================================
+   西洋占星（星座命盤）：使用可選的全域天文函式庫 window.Astronomy
+   （獨立版透過 CDN 載入 astronomy-engine 後才會啟用；Claude 預覽環境中
+   沒有這個全域物件時，星座分頁會顯示友善提示，八字分頁完全不受影響）
+   ============================================================ */
+const ASTRO_AVAILABLE = typeof window !== "undefined" && typeof window.Astronomy !== "undefined";
+const ZODIAC_SIGNS = ["牡羊座", "金牛座", "雙子座", "巨蟹座", "獅子座", "處女座", "天秤座", "天蠍座", "射手座", "摩羯座", "水瓶座", "雙魚座"];
+const ZODIAC_SYMBOL = ["♈", "♉", "♊", "♋", "♌", "♍", "♎", "♏", "♐", "♑", "♒", "♓"];
+const ZODIAC_ELEMENT = ["火", "土", "風", "水", "火", "土", "風", "水", "火", "土", "風", "水"];
+const ZODIAC_MODALITY = ["基本", "固定", "變動", "基本", "固定", "變動", "基本", "固定", "變動", "基本", "固定", "變動"];
+const ASTRO_EL = {
+  火: {
+    color: "#c0524a",
+    bg: "rgba(192,82,74,0.12)"
+  },
+  土: {
+    color: "#b08a4e",
+    bg: "rgba(176,138,78,0.14)"
+  },
+  風: {
+    color: "#4f8f8a",
+    bg: "rgba(79,143,138,0.14)"
+  },
+  水: {
+    color: "#4f7590",
+    bg: "rgba(79,117,144,0.14)"
+  }
+};
+const PLANET_BODIES = [{
+  key: "sun",
+  body: "Sun",
+  label: "太陽"
+}, {
+  key: "moon",
+  body: "Moon",
+  label: "月亮"
+}, {
+  key: "mercury",
+  body: "Mercury",
+  label: "水星"
+}, {
+  key: "venus",
+  body: "Venus",
+  label: "金星"
+}, {
+  key: "mars",
+  body: "Mars",
+  label: "火星"
+}, {
+  key: "jupiter",
+  body: "Jupiter",
+  label: "木星"
+}, {
+  key: "saturn",
+  body: "Saturn",
+  label: "土星"
+}, {
+  key: "uranus",
+  body: "Uranus",
+  label: "天王星"
+}, {
+  key: "neptune",
+  body: "Neptune",
+  label: "海王星"
+}, {
+  key: "pluto",
+  body: "Pluto",
+  label: "冥王星"
+}];
+function eclipticLongitudeToSign(lon) {
+  const norm = (lon % 360 + 360) % 360;
+  const signIdx = Math.floor(norm / 30);
+  return {
+    lon: norm,
+    signIdx,
+    degree: norm % 30,
+    sign: ZODIAC_SIGNS[signIdx],
+    symbol: ZODIAC_SYMBOL[signIdx]
+  };
+}
+function getBodyLongitude(bodyName, dateUTC) {
+  const vec = window.Astronomy.GeoVector(bodyName, dateUTC, false);
+  return window.Astronomy.Ecliptic(vec).elon;
+}
+
+// 上升星座：需要精確出生時刻＋出生地經緯度。演算法：以「正東方地平線」為觀測方向，
+// 依序從地平座標轉赤道座標（依觀測者經緯度）、再轉黃道座標，取得的黃經即為上升點。
+function computeAscendantLongitude(dateUTC, lat, lng) {
+  const time = window.Astronomy.MakeTime(dateUTC);
+  const observer = new window.Astronomy.Observer(lat, lng, 0);
+  const sphere = new window.Astronomy.Spherical(0, 90, 1); // 地平：高度0、方位角90（正東）
+  const horVec = window.Astronomy.VectorFromHorizon(sphere, time, null);
+  const rotHorEqd = window.Astronomy.Rotation_HOR_EQD(time, observer);
+  const eqdVec = window.Astronomy.RotateVector(rotHorEqd, horVec);
+  const rotEqdEcl = window.Astronomy.Rotation_EQD_ECL(time);
+  const eclVec = window.Astronomy.RotateVector(rotEqdEcl, eqdVec);
+  const s = window.Astronomy.SphereFromVector(eclVec);
+  return (s.lon % 360 + 360) % 360;
+}
+
+// 出生民用時間（預設台灣／中國 UTC+8，與八字引擎一致）轉換為 UTC 的 Date 物件
+function birthToUTCDate(profile) {
+  const {
+    y,
+    m,
+    d,
+    h,
+    min
+  } = profile.birth;
+  const hour = profile.hasTime ? h : 12;
+  const minute = profile.hasTime ? min : 0;
+  return new Date(Date.UTC(y, m - 1, d, hour - CIVIL_TZ_OFFSET, minute));
+}
+function computeNatalChart(profile) {
+  if (!ASTRO_AVAILABLE) return null;
+  const dateUTC = birthToUTCDate(profile);
+  const planets = {};
+  PLANET_BODIES.forEach(({
+    key,
+    body
+  }) => {
+    planets[key] = eclipticLongitudeToSign(getBodyLongitude(body, dateUTC));
+  });
+  let ascendant = null;
+  if (profile.hasTime && profile.location && profile.location.lat != null && profile.location.lng != null) {
+    ascendant = eclipticLongitudeToSign(computeAscendantLongitude(dateUTC, profile.location.lat, profile.location.lng));
+  }
+  return {
+    planets,
+    ascendant,
+    dateUTC
+  };
+}
+function astroElementCounts(natal) {
+  const counts = {
+    火: 0,
+    土: 0,
+    風: 0,
+    水: 0
+  };
+  Object.values(natal.planets).forEach(p => {
+    counts[ZODIAC_ELEMENT[p.signIdx]]++;
+  });
+  if (natal.ascendant) counts[ZODIAC_ELEMENT[natal.ascendant.signIdx]]++;
+  return counts;
+}
+
+// 相位：合相、六分相、四分相、三分相、對分相（標準容許度）
+const ASPECTS = [{
+  name: "合相",
+  angle: 0,
+  orb: 8,
+  type: "neutral"
+}, {
+  name: "六分相",
+  angle: 60,
+  orb: 6,
+  type: "harmonious"
+}, {
+  name: "四分相",
+  angle: 90,
+  orb: 7,
+  type: "tense"
+}, {
+  name: "三分相",
+  angle: 120,
+  orb: 8,
+  type: "harmonious"
+}, {
+  name: "對分相",
+  angle: 180,
+  orb: 8,
+  type: "tense"
+}];
+function findAspect(lonA, lonB) {
+  let diff = Math.abs(lonA - lonB) % 360;
+  if (diff > 180) diff = 360 - diff;
+  let best = null;
+  for (const a of ASPECTS) {
+    const delta = Math.abs(diff - a.angle);
+    if (delta <= a.orb && (!best || delta < best.delta)) best = {
+      ...a,
+      delta
+    };
+  }
+  return best;
+}
+const BENEFIC = ["venus", "jupiter"];
+const MALEFIC = ["mars", "saturn"];
+function aspectScoreDelta(transitKey, aspect) {
+  if (!aspect) return 0;
+  if (aspect.type === "harmonious") return BENEFIC.includes(transitKey) ? 2.5 : 2;
+  if (aspect.type === "tense") return MALEFIC.includes(transitKey) ? -2.5 : BENEFIC.includes(transitKey) ? 1 : -1.5;
+  if (BENEFIC.includes(transitKey)) return 1.5;
+  if (MALEFIC.includes(transitKey)) return -1.5;
+  return 0;
+}
+const PLANET_LABEL = {
+  sun: "太陽",
+  moon: "月亮",
+  mercury: "水星",
+  venus: "金星",
+  mars: "火星",
+  jupiter: "木星",
+  saturn: "土星"
+};
+const NATAL_LABEL = {
+  sun: "本命太陽",
+  moon: "本命月亮",
+  asc: "本命上升點"
+};
+const ASPECT_EFFECT = {
+  harmonious: "彼此能量和諧共振，是值得把握的順風時段",
+  tense: "彼此角度形成張力，容易感受到壓力或需要多一份協調與耐心",
+  neutral: "彼此能量疊加、影響會被放大，好的更好、緊繃的也更緊繃"
+};
+const ASTRO_CATEGORY_PAIRS = {
+  overall: [["moon", "sun"], ["sun", "asc"]],
+  wealth: [["venus", "sun"], ["venus", "moon"]],
+  career: [["mars", "sun"], ["jupiter", "asc"]],
+  romance: [["venus", "moon"], ["venus", "asc"]],
+  social: [["mercury", "asc"], ["moon", "asc"]],
+  health: [["mars", "sun"], ["moon", "sun"]],
+  study: [["mercury", "sun"], ["jupiter", "moon"]]
+};
+function buildAstroFortune(natal, transitDateUTC, unit) {
+  if (!natal) return null;
+  const transitKeys = ["sun", "moon", "mercury", "venus", "mars", "jupiter"];
+  const transits = {};
+  transitKeys.forEach(key => {
+    const body = PLANET_BODIES.find(p => p.key === key).body;
+    transits[key] = eclipticLongitudeToSign(getBodyLongitude(body, transitDateUTC));
+  });
+  const natalRef = {
+    sun: natal.planets.sun.lon,
+    moon: natal.planets.moon.lon,
+    asc: natal.ascendant ? natal.ascendant.lon : natal.planets.sun.lon
+  };
+  const hasRealAsc = !!natal.ascendant;
+  const scores = {};
+  const details = {};
+  Object.entries(ASTRO_CATEGORY_PAIRS).forEach(([cat, pairs]) => {
+    let score = 3;
+    let strongest = null;
+    pairs.forEach(([tKey, nKey]) => {
+      const aspect = findAspect(transits[tKey].lon, natalRef[nKey]);
+      if (aspect) {
+        score += aspectScoreDelta(tKey, aspect);
+        if (!strongest || aspect.delta < strongest.aspect.delta) strongest = {
+          transitKey: tKey,
+          natalKey: nKey,
+          aspect
+        };
+      }
+    });
+    scores[cat] = Math.max(1, Math.min(5, Math.round(score)));
+    details[cat] = strongest;
+  });
+  const moonSign = transits.moon;
+  const headline = `${PLANET_LABEL.moon}在${moonSign.sign}`;
+  return {
+    transits,
+    scores,
+    details,
+    natalRef,
+    hasRealAsc,
+    moonSign,
+    unit
+  };
+}
+
+// 行星週期（對應八字「大運」）：以每十年為一區塊，取區塊中點年份的木星／土星位置
+// 與本命太陽形成的相位，作為該十年的長期基調；並標註土星回歸等知名占星里程碑。
+function computeAstroCycles(natal, birthYear) {
+  if (!natal) return null;
+  const periods = [];
+  for (let i = 0; i < 8; i++) {
+    const startAge = i * 10;
+    const midAge = startAge + 5;
+    const dateUTC = new Date(Date.UTC(birthYear + midAge, 5, 15, 4, 0, 0));
+    const jup = eclipticLongitudeToSign(getBodyLongitude("Jupiter", dateUTC));
+    const sat = eclipticLongitudeToSign(getBodyLongitude("Saturn", dateUTC));
+    const jupAspect = findAspect(jup.lon, natal.planets.sun.lon);
+    const satAspect = findAspect(sat.lon, natal.planets.sun.lon);
+    const landmarks = [];
+    if (startAge <= 30 && startAge + 9 >= 29) landmarks.push("土星回歸期（約29–30歲）");
+    if (startAge <= 42 && startAge + 9 >= 41) landmarks.push("天王星對分相（約41–43歲，占星傳統上的「中年轉折」）");
+    if (startAge <= 59 && startAge + 9 >= 58) landmarks.push("第二次土星回歸（約58–60歲）");
+    periods.push({
+      startAge,
+      endAge: startAge + 9,
+      jup,
+      sat,
+      jupAspect,
+      satAspect,
+      landmarks
+    });
+  }
+  return periods;
+}
 function tenGod(dayMasterIdx, otherStemIdx) {
   if (dayMasterIdx === otherStemIdx) return "比肩";
   const dmEl = STEM_ELEMENT[dayMasterIdx],
@@ -1057,6 +1359,49 @@ const SCORE_TONE = {
 };
 
 /* ============================================================
+   西洋占星版的文字內容（沿用與八字相同的七大面向架構）
+   ============================================================ */
+const ASTRO_SCORE_TONE = {
+  overall: ["整體能量偏低，宜放慢步調、多休息沉澱。", "運勢平平，順著日常節奏走即可。", "整體運勢穩定平衡。", "星象助力明顯，值得積極把握機會。", "星象大好，能量飽滿，適合放手一搏。"],
+  wealth: ["財務面容易有摩擦，理財宜格外謹慎。", "收支大致平穩。", "財運穩定，量入為出即可。", "金錢運有加分，可留意合作或投資機會。", "財星能量旺盛，是進取與談判的好時機。"],
+  career: ["工作進度容易受阻，宜先守成。", "步調平緩，按部就班即可。", "工作表現穩健。", "行動力與貴人運都不錯，適合主動出擊。", "事業能量高漲，適合展現實力、爭取曝光。"],
+  romance: ["感情能量偏低，適合獨處沉澱。", "感情面平淡無波。", "關係穩定，維持現有步調即可。", "吸引力增加，多留意身邊互動對象。", "魅力全開，適合主動表達心意或安排約會。"],
+  social: ["人際互動容易有誤會，建議先退一步。", "人際互動平平。", "與人相處和睦，氣氛融洽。", "人緣加分，適合安排聚會或社交場合。", "個人魅力與人氣都旺，適合拓展人脈。"],
+  health: ["精力信號偏弱，宜多休息、避免硬撐。", "健康狀況平穩，維持日常作息即可。", "體力與精神狀態中等，量力而為。", "精神狀態不錯，適合安排運動或調養。", "能量通暢，是調整體質、養成好習慣的好時機。"],
+  study: ["學習或考核運偏弱，宜先複習基礎、避免躁進。", "學業表現平平，按進度前進即可。", "學習狀態穩定，吸收力中等。", "貴人運不錯，適合請益師長或前輩。", "思路清晰、貴人運旺，適合把握進修或考試機會。"]
+};
+const ASTRO_ADVICE = {
+  overall: {
+    yi: ["安排靜心活動", "整理生活步調"],
+    ji: ["衝動決定"]
+  },
+  wealth: {
+    yi: ["檢視預算", "理性評估合作"],
+    ji: ["衝動消費", "高風險投機"]
+  },
+  career: {
+    yi: ["主動提案", "推進進行中的計畫"],
+    ji: ["拖延重要事項"]
+  },
+  romance: {
+    yi: ["主動邀約", "表達心意"],
+    ji: ["過度猜測對方心思"]
+  },
+  social: {
+    yi: ["安排聚會", "主動聯繫朋友"],
+    ji: ["爭論是非"]
+  },
+  health: {
+    yi: ["安排運動", "早點休息"],
+    ji: ["熬夜", "暴飲暴食"]
+  },
+  study: {
+    yi: ["請益前輩", "安排進修"],
+    ji: ["臨時抱佛腳"]
+  }
+};
+
+/* ============================================================
    小工具 UI helpers
    ============================================================ */
 function StarScore({
@@ -1159,6 +1504,8 @@ function BaziApp() {
   const [viewDate, setViewDate] = useState(todayISO());
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [tab, setTab] = useState("day"); // "day" | "year" | "dayun"
+  const [system, setSystem] = useState("bazi"); // "bazi" | "astro"
+  const [astroTab, setAstroTab] = useState("today"); // "today" | "year" | "cycle"
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null); // category detail expand
@@ -1238,6 +1585,23 @@ function BaziApp() {
     if (!bazi || !active) return null;
     return computeDayun(bazi, active.gender !== "female");
   }, [bazi, active]);
+  const natal = useMemo(() => {
+    if (!active) return null;
+    return computeNatalChart(active);
+  }, [active]);
+  const astroDayFortune = useMemo(() => {
+    if (!natal) return null;
+    const [y, m, d] = viewDate.split("-").map(Number);
+    return buildAstroFortune(natal, new Date(Date.UTC(y, m - 1, d, 4, 0, 0)), "日");
+  }, [natal, viewDate]);
+  const astroYearFortune = useMemo(() => {
+    if (!natal) return null;
+    return buildAstroFortune(natal, new Date(Date.UTC(viewYear, 5, 15, 4, 0, 0)), "年");
+  }, [natal, viewYear]);
+  const astroCycles = useMemo(() => {
+    if (!natal || !active) return null;
+    return computeAstroCycles(natal, active.birth.y);
+  }, [natal, active]);
   if (loading) {
     return /*#__PURE__*/React.createElement("div", {
       style: styles.page
@@ -1307,7 +1671,25 @@ function BaziApp() {
     size: 13
   }))), !active && /*#__PURE__*/React.createElement(EmptyState, {
     onAdd: () => setShowForm(true)
-  }), active && bazi && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(BaziCard, {
+  }), active && bazi && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: styles.systemBar
+  }, [{
+    key: "bazi",
+    label: "八字命理"
+  }, {
+    key: "astro",
+    label: "星座命盤"
+  }].map(s => /*#__PURE__*/React.createElement("button", {
+    key: s.key,
+    onClick: () => {
+      setSystem(s.key);
+      setExpanded(null);
+    },
+    style: {
+      ...styles.systemBtn,
+      ...(system === s.key ? styles.systemBtnActive : {})
+    }
+  }, s.label))), system === "bazi" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(BaziCard, {
     profile: active,
     bazi: bazi,
     strength: strength,
@@ -1357,7 +1739,63 @@ function BaziApp() {
     bazi: bazi,
     birthYear: active.birth.y,
     isWide: isWide
-  })), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
+  })), system === "astro" && (!ASTRO_AVAILABLE ? /*#__PURE__*/React.createElement("div", {
+    style: styles.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#8A8272",
+      lineHeight: 1.7
+    }
+  }, "星座命盤功能需要載入天文計算函式庫，在這個預覽環境中尚未啟用。請在已部署的獨立版網站中使用這個分頁；八字命理分頁則完全不受影響，可以正常使用。")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(AstroCard, {
+    profile: active,
+    natal: natal,
+    isWide: isWide,
+    onDelete: () => deleteProfile(active.id)
+  }), /*#__PURE__*/React.createElement("div", {
+    style: styles.tabBar
+  }, [{
+    key: "today",
+    label: "今日運勢"
+  }, {
+    key: "year",
+    label: "流年展望"
+  }, {
+    key: "cycle",
+    label: "行星週期"
+  }].map(t => /*#__PURE__*/React.createElement("button", {
+    key: t.key,
+    onClick: () => {
+      setAstroTab(t.key);
+      setExpanded(null);
+    },
+    style: {
+      ...styles.tabBtn,
+      ...(astroTab === t.key ? styles.tabBtnActive : {})
+    }
+  }, t.label))), astroTab === "today" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DateSwitcher, {
+    viewDate: viewDate,
+    setViewDate: setViewDate
+  }), astroDayFortune && /*#__PURE__*/React.createElement(AstroFortuneSection, {
+    fortune: astroDayFortune,
+    unit: "日",
+    expanded: expanded,
+    setExpanded: setExpanded,
+    isWide: isWide
+  })), astroTab === "year" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(YearSwitcher, {
+    viewYear: viewYear,
+    setViewYear: setViewYear
+  }), astroYearFortune && /*#__PURE__*/React.createElement(AstroFortuneSection, {
+    fortune: astroYearFortune,
+    unit: "年",
+    expanded: expanded,
+    setExpanded: setExpanded,
+    isWide: isWide
+  })), astroTab === "cycle" && astroCycles && /*#__PURE__*/React.createElement(AstroCycleSection, {
+    cycles: astroCycles,
+    birthYear: active.birth.y,
+    isWide: isWide
+  })))), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
     existingHasSelf: profiles.some(p => p.isSelf),
     onCancel: () => setShowForm(false),
     onSave: addProfile,
@@ -1987,6 +2425,432 @@ function DayunSection({
   }, "說明：起運歲數以出生時刻到最近節氣的距離估算（3天≈1歲），為簡化估算值，專業排盤可能略有±1個月左右差異。"));
 }
 
+/* ---------------- 星座命盤卡片（本命盤） ---------------- */
+function AstroCard({
+  profile,
+  natal,
+  isWide,
+  onDelete
+}) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  if (!natal) return null;
+  const big3 = [{
+    label: "太陽",
+    p: natal.planets.sun
+  }, {
+    label: "月亮",
+    p: natal.planets.moon
+  }, {
+    label: "上升",
+    p: natal.ascendant
+  }];
+  const restPlanets = PLANET_BODIES.slice(2); // mercury..pluto
+  const counts = astroElementCounts(natal);
+  const maxCount = Math.max(1, ...Object.values(counts));
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#8A8272"
+    }
+  }, profile.name, " · ", profile.birth.y, "/", profile.birth.m, "/", profile.birth.d, profile.hasTime ? ` ${String(profile.birth.h).padStart(2, "0")}:${String(profile.birth.min).padStart(2, "0")}` : "（未知時辰）"), !confirmDel ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmDel(true),
+    style: styles.iconBtn
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 14
+  })) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onDelete,
+    style: {
+      ...styles.iconBtn,
+      color: "#c0524a"
+    }
+  }, "刪除"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmDel(false),
+    style: styles.iconBtn
+  }, "取消"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(3, 1fr)",
+      gap: 8
+    }
+  }, big3.map((pl, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      ...styles.tablet,
+      borderLeft: pl.p ? `3px solid ${ASTRO_EL[ZODIAC_ELEMENT[pl.p.signIdx]].color}` : "3px solid #E2DACA"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.tabletLabel
+  }, pl.label), pl.p ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.tabletChar,
+      fontSize: 22,
+      color: ASTRO_EL[ZODIAC_ELEMENT[pl.p.signIdx]].color
+    }
+  }, pl.p.symbol), /*#__PURE__*/React.createElement("div", {
+    style: styles.tabletSub
+  }, pl.p.sign), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9.5,
+      color: "#B3A78E"
+    }
+  }, pl.p.degree.toFixed(1), "°")) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.tabletChar,
+      color: "#B3A78E",
+      fontSize: 11,
+      marginTop: 10,
+      lineHeight: 1.4
+    }
+  }, i === 2 ? "需出生時辰\n＋出生地" : "未知")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#8A8272",
+      marginBottom: 6
+    }
+  }, "四大元素分布"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, Object.entries(counts).map(([el, n]) => /*#__PURE__*/React.createElement("div", {
+    key: el,
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      fontSize: 10,
+      color: ASTRO_EL[el].color,
+      marginBottom: 3
+    }
+  }, /*#__PURE__*/React.createElement("span", null, el), /*#__PURE__*/React.createElement("span", null, n)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 5,
+      borderRadius: 3,
+      background: "rgba(58,50,38,0.08)",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: `${n / maxCount * 100}%`,
+      height: "100%",
+      background: ASTRO_EL[el].color
+    }
+  })))))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowMore(v => !v),
+    style: styles.moreToggle
+  }, showMore ? "收起其他行星星座" : "查看其他行星落座", showMore ? /*#__PURE__*/React.createElement(ChevronUp, {
+    size: 13
+  }) : /*#__PURE__*/React.createElement(ChevronDown, {
+    size: 13
+  })), showMore && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: "grid",
+      gridTemplateColumns: isWide ? "repeat(4, 1fr)" : "repeat(2, 1fr)",
+      gap: 8
+    }
+  }, restPlanets.map(({
+    key,
+    label
+  }) => {
+    const p = natal.planets[key];
+    return /*#__PURE__*/React.createElement("div", {
+      key: key,
+      style: styles.subBlock
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#8A8272",
+        marginBottom: 2
+      }
+    }, label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 700,
+        color: ASTRO_EL[ZODIAC_ELEMENT[p.signIdx]].color
+      }
+    }, p.symbol, " ", p.sign), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10.5,
+        color: "#A79C86"
+      }
+    }, p.degree.toFixed(1), "°"));
+  })), !natal.ascendant && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#A79C86",
+      marginTop: 10,
+      lineHeight: 1.6
+    }
+  }, "上升星座需要精確出生時辰與出生地經緯度，補齊「新增／編輯命盤」中的資訊即可解鎖。"));
+}
+
+/* ---------------- 星座命盤運勢（今日／流年皆共用） ---------------- */
+function AstroFortuneSection({
+  fortune,
+  unit,
+  expanded,
+  setExpanded,
+  isWide
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.dayPillarBanner
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.bannerEyebrow
+  }, unit === "日" ? "今日月相位置" : "當年月相位置"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700
+    }
+  }, fortune.moonSign.symbol, " ", fortune.moonSign.sign, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#8a8272",
+      marginLeft: 8,
+      fontWeight: 400
+    }
+  }, fortune.moonSign.degree.toFixed(1), "°"))), !fortune.hasRealAsc && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right",
+      maxWidth: 140
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#A79C86",
+      lineHeight: 1.5
+    }
+  }, "暫以太陽點替代上升點推算"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: isWide ? "grid" : "flex",
+      gridTemplateColumns: isWide ? "repeat(2, 1fr)" : undefined,
+      flexDirection: isWide ? undefined : "column",
+      gap: 8,
+      marginTop: 10
+    }
+  }, CATEGORY_META.map(({
+    key,
+    label,
+    icon: Icon
+  }) => {
+    const score = fortune.scores[key];
+    const isOpen = expanded === key;
+    const detail = fortune.details[key];
+    const aspectSentence = detail ? `今日運行的${PLANET_LABEL[detail.transitKey]}與你的${NATAL_LABEL[detail.natalKey]}形成「${detail.aspect.name}」，${ASPECT_EFFECT[detail.aspect.type]}。` : "今天沒有特別強的行星相位牽動這個領域，運勢平穩、按日常步調進行即可。";
+    const summary = [ASTRO_SCORE_TONE[key][score - 1], aspectSentence].join("");
+    return /*#__PURE__*/React.createElement("div", {
+      key: key,
+      style: styles.fortuneCard
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setExpanded(isOpen ? null : key),
+      style: styles.fortuneCardHead
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneIconWrap
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 15,
+      color: "#b3492b"
+    })), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneTextCol
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600,
+        marginBottom: 3
+      }
+    }, label), /*#__PURE__*/React.createElement("p", {
+      style: styles.fortuneSummary
+    }, summary)), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneScoreCol
+    }, /*#__PURE__*/React.createElement(StarScore, {
+      score: score
+    }), isOpen ? /*#__PURE__*/React.createElement(ChevronUp, {
+      size: 14,
+      color: "#8a8272"
+    }) : /*#__PURE__*/React.createElement(ChevronDown, {
+      size: 14,
+      color: "#8a8272"
+    }))), isOpen && /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneCardDetail
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "這個面向主要參考", key === "career" || key === "study" ? "水星／木星／火星" : key === "romance" || key === "wealth" ? "金星" : "月亮", "與你本命重要位置的相位關係，並綜合行星本身的吉凶屬性（金星、木星傳統上偏吉；火星、土星傳統上偏具挑戰性）判斷。"), !fortune.hasRealAsc && (key === "career" || key === "social" || key === "romance") && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: "#A85D2E"
+      }
+    }, "此面向通常會參考「上升點」，但目前命盤缺少出生地經緯度，暫以太陽位置替代計算，補齊出生地資訊後分析會更精準。")));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: styles.yijiCard
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.yijiLabel
+  }, "宜"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6
+    }
+  }, Array.from(new Set(Object.keys(fortune.scores).filter(k => fortune.scores[k] >= 4).flatMap(k => ASTRO_ADVICE[k].yi))).slice(0, 4).map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    style: styles.yiTag
+  }, t)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.yijiLabel,
+      color: "#8A8272"
+    }
+  }, "忌"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6
+    }
+  }, Array.from(new Set(Object.keys(fortune.scores).filter(k => fortune.scores[k] <= 2).flatMap(k => ASTRO_ADVICE[k].ji))).slice(0, 4).map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    style: styles.jiTag
+  }, t)))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#9C927C",
+      marginTop: 12,
+      lineHeight: 1.6,
+      padding: "0 2px"
+    }
+  }, "說明：分析採用「行運（transit）對本命盤」的相位技法——比較", unit === "日" ? "今日" : "當年", "行星實際位置與你本命太陽、月亮、上升點的角度關係。占星分析僅供參考與自我覺察，不宜作為重大決策的唯一依據。"));
+}
+
+/* ---------------- 行星週期（對應八字大運） ---------------- */
+function AstroCycleSection({
+  cycles,
+  birthYear,
+  isWide
+}) {
+  const [openIdx, setOpenIdx] = useState(null);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#6B6252",
+      lineHeight: 1.7,
+      margin: "0 2px 10px"
+    }
+  }, "以每十年為一區塊，取區塊中點年份的木星與土星位置，對照你本命太陽形成的相位，作為那十年的長期基調；並標註「土星回歸」等占星傳統上重要的人生轉折時期。點選任一區塊可展開詳細解讀。"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: isWide ? "grid" : "flex",
+      gridTemplateColumns: isWide ? "repeat(2, 1fr)" : undefined,
+      flexDirection: isWide ? undefined : "column",
+      gap: 8
+    }
+  }, cycles.map((c, i) => {
+    const isOpen = openIdx === i;
+    const calYearStart = birthYear + c.startAge;
+    const calYearEnd = birthYear + c.endAge;
+    const jupTone = c.jupAspect ? c.jupAspect.type === "harmonious" ? "順" : c.jupAspect.type === "tense" ? "緊" : "強" : "平";
+    const satTone = c.satAspect ? c.satAspect.type === "harmonious" ? "順" : c.satAspect.type === "tense" ? "緊" : "強" : "平";
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: styles.fortuneCard
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setOpenIdx(isOpen ? null : i),
+      style: styles.dayunHead
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...styles.dayunPillarBox,
+        borderColor: ASTRO_EL[ZODIAC_ELEMENT[c.jup.signIdx]].color,
+        fontSize: 18
+      }
+    }, c.jup.symbol, c.sat.symbol), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneTextCol
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600
+      }
+    }, c.startAge, "～", c.endAge, " 歲\u3000", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#A79C86",
+        fontWeight: 400
+      }
+    }, "(", calYearStart, "–", calYearEnd, ")")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#8A8272"
+      }
+    }, "木星", jupTone, "・土星", satTone, c.landmarks.length ? ` · ${c.landmarks[0]}` : "")), isOpen ? /*#__PURE__*/React.createElement(ChevronUp, {
+      size: 14,
+      color: "#8a8272"
+    }) : /*#__PURE__*/React.createElement(ChevronDown, {
+      size: 14,
+      color: "#8a8272"
+    })), isOpen && /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneCardDetail
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "這十年間，代表擴張與機會的木星行經", /*#__PURE__*/React.createElement("b", null, c.jup.sign), "，與你本命太陽", c.jupAspect ? `形成「${c.jupAspect.name}」，${ASPECT_EFFECT[c.jupAspect.type]}` : "沒有形成明顯相位，影響較為中性", "；代表責任與考驗的土星行經", /*#__PURE__*/React.createElement("b", null, c.sat.sign), "，", c.satAspect ? `與本命太陽形成「${c.satAspect.name}」，${ASPECT_EFFECT[c.satAspect.type]}` : "沒有形成明顯相位", "。"), c.landmarks.length > 0 && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: "#A85D2E"
+      }
+    }, "這段期間涵蓋占星傳統上重要的「", c.landmarks.join("、"), "」，是許多人生階段轉折、重新盤點方向的時期。")));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10.5,
+      color: "#9C927C",
+      marginTop: 12,
+      lineHeight: 1.6,
+      padding: "0 2px"
+    }
+  }, "說明：每個十年區塊僅取中點年份的行星位置作為代表，實際影響會隨行運逐年變化，此處僅呈現長期基調。"));
+}
+
 /* ---------------- Profile form ---------------- */
 function ProfileForm({
   onCancel,
@@ -2000,6 +2864,9 @@ function ProfileForm({
   const [date, setDate] = useState("");
   const [hasTime, setHasTime] = useState(true);
   const [time, setTime] = useState("12:00");
+  const [cityLabel, setCityLabel] = useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
   const [err, setErr] = useState("");
   const submit = () => {
     if (!date) {
@@ -2017,6 +2884,13 @@ function ProfileForm({
       [h, min] = time.split(":").map(Number);
     }
     const finalName = name.trim() || (isSelf ? "我" : `訪客 ${new Date().toLocaleDateString()}`);
+    const latNum = parseFloat(lat),
+      lngNum = parseFloat(lng);
+    const location = !isNaN(latNum) && !isNaN(lngNum) ? {
+      label: cityLabel.trim(),
+      lat: latNum,
+      lng: lngNum
+    } : null;
     onSave({
       id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: finalName,
@@ -2030,6 +2904,7 @@ function ProfileForm({
         h,
         min
       },
+      location,
       createdAt: Date.now()
     });
   };
@@ -2126,7 +3001,47 @@ function ProfileForm({
       color: "#8A8272",
       lineHeight: 1.6
     }
-  }, "將只排出年、月、日三柱；運勢分析仍以日主（日柱天干）為核心，準確度不受影響。"), err && /*#__PURE__*/React.createElement("div", {
+  }, "將只排出年、月、日三柱；運勢分析仍以日主（日柱天干）為核心，準確度不受影響。"), hasTime && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement(FieldLabel, null, "出生地（選填，用於星座命盤的上升星座）"), /*#__PURE__*/React.createElement("input", {
+    value: cityLabel,
+    onChange: e => setCityLabel(e.target.value),
+    placeholder: "城市名稱，例如：台北市",
+    style: styles.input
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: lat,
+    onChange: e => setLat(e.target.value),
+    placeholder: "緯度，例如 25.03",
+    inputMode: "decimal",
+    style: {
+      ...styles.input,
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    value: lng,
+    onChange: e => setLng(e.target.value),
+    placeholder: "經度，例如 121.56",
+    inputMode: "decimal",
+    style: {
+      ...styles.input,
+      flex: 1
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#A79C86",
+      lineHeight: 1.6,
+      marginTop: 4
+    }
+  }, "不確定經緯度嗎？在 Google 地圖上搜尋出生城市、長按該地點，畫面下方就會顯示座標數字。不填也沒關係，八字與太陽、月亮星座都不受影響，只有「上升星座」需要這項資訊。"))), err && /*#__PURE__*/React.createElement("div", {
     style: {
       color: "#c0524a",
       fontSize: 12,
@@ -2462,6 +3377,26 @@ const styles = {
     color: "#B14338",
     padding: "4px 9px",
     borderRadius: 999
+  },
+  systemBar: {
+    display: "flex",
+    gap: 8,
+    marginBottom: 14
+  },
+  systemBtn: {
+    flex: 1,
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.10)",
+    borderRadius: 12,
+    padding: "10px 8px",
+    fontSize: 13.5,
+    fontWeight: 700,
+    color: "#8A8272"
+  },
+  systemBtnActive: {
+    background: "#b3492b",
+    color: "#fff",
+    border: "1px solid #b3492b"
   },
   tabBar: {
     display: "flex",
