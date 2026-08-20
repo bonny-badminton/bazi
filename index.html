@@ -1348,6 +1348,40 @@ const CATEGORY_META = [{
   label: "學業貴人",
   icon: GraduationCap
 }];
+// 展開明細最下方的「喜用神／忌神方向」總結：依運勢項目分別給出對應的說明，而非各項共用同一句話
+const CATEGORY_FAVORABLE_NOTE = {
+  overall: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，整體氣場走向平衡，是值得積極把握、推進計畫的一${unit}。`,
+  wealth: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，有助財運穩定成長，適合談合作、做理財規劃。`,
+  career: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，有助工作推進與貴人扶持，適合主動爭取表現機會。`,
+  romance: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，感情能量偏向和諧，適合主動經營關係或表達心意。`,
+  social: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，人際互動較為順暢，適合拓展人脈或安排聚會聯誼。`,
+  health: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，有助氣血調和、身心狀態平穩，是調養身體的好時機。`,
+  study: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，學習與文書、貴人運都較為順遂，適合進修或請益師長。`
+};
+const CATEGORY_UNFAVORABLE_NOTE = {
+  overall: unit => `這${unit}的五行氣落在你命局判定的忌神方向，容易放大既有的失衡，行事上宜求穩、避免躁進。`,
+  wealth: unit => `這${unit}的五行氣落在你命局判定的忌神方向，理財上宜格外謹慎，避免衝動消費、借貸或高風險投資。`,
+  career: unit => `這${unit}的五行氣落在你命局判定的忌神方向，工作上容易遇到阻力或意見分歧，宜謹慎行事、避免躁進決策。`,
+  romance: unit => `這${unit}的五行氣落在你命局判定的忌神方向，感情面容易有情緒起伏或誤會，互動上宜多一點包容與耐心。`,
+  social: unit => `這${unit}的五行氣落在你命局判定的忌神方向，人際互動較容易有摩擦，建議凡事多一分耐心與傾聽、避免爭執。`,
+  health: unit => `這${unit}的五行氣落在你命局判定的忌神方向，容易感覺體力或精神較弱，建議多休息、避免過度勞累與硬撐。`,
+  study: unit => `這${unit}的五行氣落在你命局判定的忌神方向，學習或考核上容易分心受阻，宜先複習基礎、避免躁進求快。`
+};
+
+const CATEGORY_NEUTRAL_NOTE = {
+  overall: unit => `這${unit}的五行氣與你命局的喜忌關係較不明顯，運勢起伏不大，依日常步調行事即可。`,
+  wealth: unit => `這${unit}的五行氣與你的財星喜忌關聯不大，財運大致持平，維持原有理財步調即可。`,
+  career: unit => `這${unit}的五行氣對你的工作運影響不大，可依原訂計畫穩定推進，不必過度期待或擔心。`,
+  romance: unit => `這${unit}的五行氣對你的桃花運影響不大，感情面維持平常心、順其自然即可。`,
+  social: unit => `這${unit}的五行氣對你的人際運影響不大，人際互動大致一如往常。`,
+  health: unit => `這${unit}的五行氣與你的體質喜忌關聯不大，健康狀況大致平穩，維持規律作息即可。`,
+  study: unit => `這${unit}的五行氣對你的學業貴人運影響不大，學習與進修可按部就班進行。`
+};
+
+// 收合狀態下的一句話摘要，統一使用淺顯的分數評語，避免夾雜十神、五行、宮位等術語
+function fortuneSimpleSummary(key, score) {
+  return SCORE_TONE[key][score - 1];
+}
 const SCORE_TONE = {
   overall: ["諸事保守，宜靜不宜動。", "略顯平淡，順其自然即可。", "運勢平穩如常。", "運勢順遂，值得積極把握。", "氣勢極佳，適合大膽出擊。"],
   wealth: ["財來財去，理財上要格外謹慎。", "收支大致持平。", "財運穩定，量入為出即可。", "偏財略有機會，可留意周邊訊息。", "財星高照，是進取與談合作的好時機。"],
@@ -2192,7 +2226,7 @@ function FortuneSection({
   }) => {
     const score = fortune.scores[key];
     const isOpen = expanded === key;
-    const summary = [SCORE_TONE[key][score - 1], fortune.info.desc, key === "overall" || key === "health" ? fortune.elementNote : "", fortune.comboNote].filter(Boolean).join("");
+    const summary = fortuneSimpleSummary(key, score);
     return /*#__PURE__*/React.createElement("div", {
       key: key,
       style: styles.fortuneCard
@@ -2231,7 +2265,12 @@ function FortuneSection({
         margin: "0 0 8px",
         lineHeight: 1.7
       }
-    }, CATEGORY_DEEPDIVE[key]), key === "health" && /*#__PURE__*/React.createElement("p", {
+    }, CATEGORY_DEEPDIVE[key]), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "就你的命盤而言，這", unit, "與日主形成「", /*#__PURE__*/React.createElement("b", null, fortune.god), "」（", fortune.info.tag, "）：", fortune.info.desc, fortune.comboNote), key === "health" && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7
@@ -2248,13 +2287,19 @@ function FortuneSection({
         lineHeight: 1.7,
         color: "#3F7A3D"
       }
-    }, "這", unit, "的五行氣屬於你命局判定的喜用神方向，整體而言是有助平衡、值得把握的一", unit, "。"), fortune.isUnfavorable && /*#__PURE__*/React.createElement("p", {
+    }, CATEGORY_FAVORABLE_NOTE[key](unit)), fortune.isUnfavorable && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7,
         color: "#B14338"
       }
-    }, "這", unit, "的五行氣落在你命局判定的忌神方向，容易放大既有的失衡，行事上宜求穩、避免躁進。")));
+    }, CATEGORY_UNFAVORABLE_NOTE[key](unit)), !fortune.isFavorable && !fortune.isUnfavorable && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: "#8A8272"
+      }
+    }, CATEGORY_NEUTRAL_NOTE[key](unit))));
   })), /*#__PURE__*/React.createElement("div", {
     style: styles.yijiCard
   }, /*#__PURE__*/React.createElement("div", {
@@ -2851,6 +2896,189 @@ function AstroCycleSection({
   }, "說明：每個十年區塊僅取中點年份的行星位置作為代表，實際影響會隨行運逐年變化，此處僅呈現長期基調。"));
 }
 
+/* ---------------- 出生地城市座標對照表（用於輸入城市名稱後自動帶入經緯度） ---------------- */
+// 台灣 22 縣市（以縣市治所座標為代表）＋常見海外城市，供出生地自動查找經緯度使用。
+// 找不到的城市仍可展開「手動輸入經緯度」自行輸入。
+const CITY_COORDS = [{
+  name: "台北市",
+  lat: 25.033,
+  lng: 121.5654
+}, {
+  name: "新北市",
+  lat: 25.0169,
+  lng: 121.4627
+}, {
+  name: "桃園市",
+  lat: 24.9936,
+  lng: 121.301
+}, {
+  name: "台中市",
+  lat: 24.1477,
+  lng: 120.6736
+}, {
+  name: "台南市",
+  lat: 22.9998,
+  lng: 120.2269
+}, {
+  name: "高雄市",
+  lat: 22.6273,
+  lng: 120.3014
+}, {
+  name: "基隆市",
+  lat: 25.1276,
+  lng: 121.7392
+}, {
+  name: "新竹市",
+  lat: 24.8138,
+  lng: 120.9675
+}, {
+  name: "新竹縣",
+  lat: 24.8386,
+  lng: 121.0178
+}, {
+  name: "苗栗縣",
+  lat: 24.5602,
+  lng: 120.8214
+}, {
+  name: "彰化縣",
+  lat: 24.0518,
+  lng: 120.5161
+}, {
+  name: "南投縣",
+  lat: 23.9609,
+  lng: 120.9718
+}, {
+  name: "雲林縣",
+  lat: 23.7092,
+  lng: 120.4313
+}, {
+  name: "嘉義市",
+  lat: 23.4801,
+  lng: 120.4491
+}, {
+  name: "嘉義縣",
+  lat: 23.4518,
+  lng: 120.2555
+}, {
+  name: "屏東縣",
+  lat: 22.5519,
+  lng: 120.5487
+}, {
+  name: "宜蘭縣",
+  lat: 24.7021,
+  lng: 121.7378
+}, {
+  name: "花蓮縣",
+  lat: 23.9871,
+  lng: 121.6015
+}, {
+  name: "台東縣",
+  lat: 22.7583,
+  lng: 121.1444
+}, {
+  name: "澎湖縣",
+  lat: 23.5711,
+  lng: 119.5793
+}, {
+  name: "金門縣",
+  lat: 24.4324,
+  lng: 118.317
+}, {
+  name: "連江縣",
+  lat: 26.1607,
+  lng: 119.9498
+}, {
+  name: "香港",
+  lat: 22.3193,
+  lng: 114.1694
+}, {
+  name: "澳門",
+  lat: 22.1987,
+  lng: 113.5439
+}, {
+  name: "上海市",
+  lat: 31.2304,
+  lng: 121.4737
+}, {
+  name: "北京市",
+  lat: 39.9042,
+  lng: 116.4074
+}, {
+  name: "廣州市",
+  lat: 23.1291,
+  lng: 113.2644
+}, {
+  name: "深圳市",
+  lat: 22.5431,
+  lng: 114.0579
+}, {
+  name: "東京",
+  lat: 35.6762,
+  lng: 139.6503
+}, {
+  name: "大阪",
+  lat: 34.6937,
+  lng: 135.5023
+}, {
+  name: "首爾",
+  lat: 37.5665,
+  lng: 126.978
+}, {
+  name: "新加坡",
+  lat: 1.3521,
+  lng: 103.8198
+}, {
+  name: "吉隆坡",
+  lat: 3.139,
+  lng: 101.6869
+}, {
+  name: "紐約",
+  lat: 40.7128,
+  lng: -74.006
+}, {
+  name: "洛杉磯",
+  lat: 34.0522,
+  lng: -118.2437
+}, {
+  name: "舊金山",
+  lat: 37.7749,
+  lng: -122.4194
+}, {
+  name: "溫哥華",
+  lat: 49.2827,
+  lng: -123.1207
+}, {
+  name: "多倫多",
+  lat: 43.6532,
+  lng: -79.3832
+}, {
+  name: "雪梨",
+  lat: -33.8688,
+  lng: 151.2093
+}, {
+  name: "墨爾本",
+  lat: -37.8136,
+  lng: 144.9631
+}, {
+  name: "倫敦",
+  lat: 51.5074,
+  lng: -0.1278
+}];
+function normalizeCityQuery(s) {
+  return (s || "").trim().replace(/臺/g, "台");
+}
+function searchCityCoords(query) {
+  const q = normalizeCityQuery(query);
+  if (!q) return [];
+  const starts = [],
+    contains = [];
+  CITY_COORDS.forEach(c => {
+    const name = normalizeCityQuery(c.name);
+    if (name === q) starts.unshift(c);else if (name.startsWith(q)) starts.push(c);else if (name.includes(q)) contains.push(c);
+  });
+  return [...starts, ...contains].slice(0, 6);
+}
+
 /* ---------------- Profile form ---------------- */
 function ProfileForm({
   onCancel,
@@ -2867,7 +3095,24 @@ function ProfileForm({
   const [cityLabel, setCityLabel] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [citySuggestOpen, setCitySuggestOpen] = useState(false);
+  const [showManualLatLng, setShowManualLatLng] = useState(false);
   const [err, setErr] = useState("");
+  const citySuggestions = citySuggestOpen ? searchCityCoords(cityLabel) : [];
+  const handleCityChange = e => {
+    const v = e.target.value;
+    setCityLabel(v);
+    setCitySuggestOpen(true);
+    // 使用者重新輸入代表原本自動帶入的座標可能已不對應，清空待重新選取
+    setLat("");
+    setLng("");
+  };
+  const pickCity = c => {
+    setCityLabel(c.name);
+    setLat(String(c.lat));
+    setLng(String(c.lng));
+    setCitySuggestOpen(false);
+  };
   const submit = () => {
     if (!date) {
       setErr("請選擇出生日期");
@@ -3003,18 +3248,92 @@ function ProfileForm({
     }
   }, "將只排出年、月、日三柱；運勢分析仍以日主（日柱天干）為核心，準確度不受影響。"), hasTime && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
-      marginTop: 14
+      marginTop: 14,
+      position: "relative"
     }
   }, /*#__PURE__*/React.createElement(FieldLabel, null, "出生地（選填，用於星座命盤的上升星座）"), /*#__PURE__*/React.createElement("input", {
     value: cityLabel,
-    onChange: e => setCityLabel(e.target.value),
-    placeholder: "城市名稱，例如：台北市",
+    onChange: handleCityChange,
+    onFocus: () => setCitySuggestOpen(true),
+    onBlur: () => setTimeout(() => setCitySuggestOpen(false), 150),
+    placeholder: "輸入城市名稱，例如：台中市",
+    autoComplete: "off",
     style: styles.input
-  }), /*#__PURE__*/React.createElement("div", {
+  }), citySuggestOpen && citySuggestions.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: "100%",
+      marginTop: 2,
+      background: "#fff",
+      border: "1px solid #E7E0D2",
+      borderRadius: 10,
+      boxShadow: "0 6px 16px rgba(0,0,0,0.1)",
+      zIndex: 30,
+      overflow: "hidden"
+    }
+  }, citySuggestions.map(c => /*#__PURE__*/React.createElement("div", {
+    key: c.name,
+    onMouseDown: () => pickCity(c),
+    style: {
+      padding: "9px 12px",
+      fontSize: 13,
+      cursor: "pointer",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      borderBottom: "1px solid #F1ECE0"
+    }
+  }, /*#__PURE__*/React.createElement("span", null, c.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#A79C86",
+      fontSize: 11
+    }
+  }, c.lat.toFixed(2), ", ", c.lng.toFixed(2))))), lat && lng ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#3F7A3D",
+      marginTop: 6,
+      display: "flex",
+      alignItems: "center",
+      gap: 6
+    }
+  }, "✓ 已自動定位經緯度：", lat, ", ", lng, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowManualLatLng(v => !v),
+    style: {
+      marginLeft: "auto",
+      background: "none",
+      border: "none",
+      color: "#8A8272",
+      fontSize: 11,
+      textDecoration: "underline",
+      cursor: "pointer"
+    }
+  }, "手動修正")) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#A79C86",
+      marginTop: 6
+    }
+  }, "輸入城市名稱後，從下方清單點選即可自動帶入經緯度；找不到你的城市時，可", /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowManualLatLng(true),
+    style: {
+      background: "none",
+      border: "none",
+      color: "#b3492b",
+      fontSize: 11,
+      textDecoration: "underline",
+      cursor: "pointer",
+      padding: 0
+    }
+  }, "手動輸入經緯度")), showManualLatLng && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
-      marginTop: 6
+      marginTop: 8
     }
   }, /*#__PURE__*/React.createElement("input", {
     value: lat,
@@ -3041,7 +3360,7 @@ function ProfileForm({
       lineHeight: 1.6,
       marginTop: 4
     }
-  }, "不確定經緯度嗎？在 Google 地圖上搜尋出生城市、長按該地點，畫面下方就會顯示座標數字。不填也沒關係，八字與太陽、月亮星座都不受影響，只有「上升星座」需要這項資訊。"))), err && /*#__PURE__*/React.createElement("div", {
+  }, "不填也沒關係，八字與太陽、月亮星座都不受影響，只有「上升星座」需要這項資訊。"))), err && /*#__PURE__*/React.createElement("div", {
     style: {
       color: "#c0524a",
       fontSize: 12,
