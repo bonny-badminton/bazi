@@ -1348,35 +1348,48 @@ const CATEGORY_META = [{
   label: "學業貴人",
   icon: GraduationCap
 }];
-// 展開明細最下方的「喜用神／忌神方向」總結：依運勢項目分別給出對應的說明，而非各項共用同一句話
+// 展開明細最下方的總結文字：依「該項運勢自己的分數」決定正向／中性／負向基調（呼應星等），
+// 而非套用當日全域五行喜忌（那是同一天所有項目共用的判斷，容易造成「四顆星卻寫忌神」的矛盾）。
 const CATEGORY_FAVORABLE_NOTE = {
-  overall: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，整體氣場走向平衡，是值得積極把握、推進計畫的一${unit}。`,
-  wealth: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，有助財運穩定成長，適合談合作、做理財規劃。`,
-  career: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，有助工作推進與貴人扶持，適合主動爭取表現機會。`,
-  romance: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，感情能量偏向和諧，適合主動經營關係或表達心意。`,
-  social: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，人際互動較為順暢，適合拓展人脈或安排聚會聯誼。`,
-  health: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，有助氣血調和、身心狀態平穩，是調養身體的好時機。`,
-  study: unit => `這${unit}的五行氣屬於你命局判定的喜用神方向，學習與文書、貴人運都較為順遂，適合進修或請益師長。`
+  overall: unit => `綜合十神與四柱沖合關係來看，這${unit}對你偏向加分，是值得積極把握、推進計畫的一${unit}。`,
+  wealth: unit => `綜合十神與四柱沖合關係來看，這${unit}的財運偏向加分，適合談合作、做理財規劃。`,
+  career: unit => `綜合十神與宮位沖合關係來看，這${unit}的工作運偏向加分，有機會獲得貴人扶持，適合主動爭取表現機會。`,
+  romance: unit => `綜合十神與宮位沖合關係來看，這${unit}的桃花運偏向加分，感情能量和諧，適合主動經營關係或表達心意。`,
+  social: unit => `綜合十神與宮位沖合關係來看，這${unit}的人際運偏向加分，互動較為順暢，適合拓展人脈或安排聚會聯誼。`,
+  health: unit => `綜合五行分布與四柱沖合關係來看，這${unit}的健康運偏向加分，氣血較為調和，是調養身體的好時機。`,
+  study: unit => `綜合十神與宮位沖合關係來看，這${unit}的學業貴人運偏向加分，適合進修或請益師長。`
 };
 const CATEGORY_UNFAVORABLE_NOTE = {
-  overall: unit => `這${unit}的五行氣落在你命局判定的忌神方向，容易放大既有的失衡，行事上宜求穩、避免躁進。`,
-  wealth: unit => `這${unit}的五行氣落在你命局判定的忌神方向，理財上宜格外謹慎，避免衝動消費、借貸或高風險投資。`,
-  career: unit => `這${unit}的五行氣落在你命局判定的忌神方向，工作上容易遇到阻力或意見分歧，宜謹慎行事、避免躁進決策。`,
-  romance: unit => `這${unit}的五行氣落在你命局判定的忌神方向，感情面容易有情緒起伏或誤會，互動上宜多一點包容與耐心。`,
-  social: unit => `這${unit}的五行氣落在你命局判定的忌神方向，人際互動較容易有摩擦，建議凡事多一分耐心與傾聽、避免爭執。`,
-  health: unit => `這${unit}的五行氣落在你命局判定的忌神方向，容易感覺體力或精神較弱，建議多休息、避免過度勞累與硬撐。`,
-  study: unit => `這${unit}的五行氣落在你命局判定的忌神方向，學習或考核上容易分心受阻，宜先複習基礎、避免躁進求快。`
+  overall: unit => `綜合十神與四柱沖合關係來看，這${unit}對你偏向扣分，容易放大既有的失衡，行事上宜求穩、避免躁進。`,
+  wealth: unit => `綜合十神與四柱沖合關係來看，這${unit}的財運偏向扣分，理財上宜格外謹慎，避免衝動消費、借貸或高風險投資。`,
+  career: unit => `綜合十神與宮位沖合關係來看，這${unit}的工作運偏向扣分，容易遇到阻力或意見分歧，宜謹慎行事、避免躁進決策。`,
+  romance: unit => `綜合十神與宮位沖合關係來看，這${unit}的桃花運偏向扣分，感情面容易有情緒起伏或誤會，互動上宜多一點包容與耐心。`,
+  social: unit => `綜合十神與宮位沖合關係來看，這${unit}的人際運偏向扣分，互動較容易有摩擦，建議凡事多一分耐心與傾聽、避免爭執。`,
+  health: unit => `綜合五行分布與四柱沖合關係來看，這${unit}的健康運偏向扣分，容易感覺體力或精神較弱，建議多休息、避免過度勞累與硬撐。`,
+  study: unit => `綜合十神與宮位沖合關係來看，這${unit}的學業貴人運偏向扣分，容易分心受阻，宜先複習基礎、避免躁進求快。`
 };
 
 const CATEGORY_NEUTRAL_NOTE = {
-  overall: unit => `這${unit}的五行氣與你命局的喜忌關係較不明顯，運勢起伏不大，依日常步調行事即可。`,
-  wealth: unit => `這${unit}的五行氣與你的財星喜忌關聯不大，財運大致持平，維持原有理財步調即可。`,
-  career: unit => `這${unit}的五行氣對你的工作運影響不大，可依原訂計畫穩定推進，不必過度期待或擔心。`,
-  romance: unit => `這${unit}的五行氣對你的桃花運影響不大，感情面維持平常心、順其自然即可。`,
-  social: unit => `這${unit}的五行氣對你的人際運影響不大，人際互動大致一如往常。`,
-  health: unit => `這${unit}的五行氣與你的體質喜忌關聯不大，健康狀況大致平穩，維持規律作息即可。`,
-  study: unit => `這${unit}的五行氣對你的學業貴人運影響不大，學習與進修可按部就班進行。`
+  overall: unit => `這${unit}沒有特別強的加分或扣分因素，運勢起伏不大，依日常步調行事即可。`,
+  wealth: unit => `這${unit}沒有特別強的加分或扣分因素，財運大致持平，維持原有理財步調即可。`,
+  career: unit => `這${unit}沒有特別強的加分或扣分因素，可依原訂計畫穩定推進，不必過度期待或擔心。`,
+  romance: unit => `這${unit}沒有特別強的加分或扣分因素，感情面維持平常心、順其自然即可。`,
+  social: unit => `這${unit}沒有特別強的加分或扣分因素，人際互動大致一如往常。`,
+  health: unit => `這${unit}沒有特別強的加分或扣分因素，健康狀況大致平穩，維持規律作息即可。`,
+  study: unit => `這${unit}沒有特別強的加分或扣分因素，學習與進修可按部就班進行。`
 };
+
+// 五行喜用神／忌神方向的補充說明：僅在「該項運勢分數的正負向」與「當日五行喜忌方向」一致時才附加，
+// 避免出現分數是好的、卻又補一句「落在忌神方向」這類自相矛盾的情況。
+function elementalAddendum(unit, tierIsFavorable, fortune) {
+  if (tierIsFavorable && fortune.isFavorable) {
+    return `此外，這${unit}的五行氣也正好落在你命局判定的喜用神方向，是額外的加分。`;
+  }
+  if (!tierIsFavorable && fortune.isUnfavorable) {
+    return `此外，這${unit}的五行氣也落在你命局判定的忌神方向，容易放大不順。`;
+  }
+  return "";
+}
 
 // 收合狀態下的一句話摘要，統一使用淺顯的分數評語，避免夾雜十神、五行、宮位等術語
 function fortuneSimpleSummary(key, score) {
@@ -2281,19 +2294,19 @@ function FortuneSection({
         lineHeight: 1.7,
         color: "#A85D2E"
       }
-    }, "這", unit, "觸動了你命局中的桃花星（依日支／年支的三合局判斷），人際互動中會更容易被留意到，是社交與展現魅力的好時機。"), fortune.isFavorable && /*#__PURE__*/React.createElement("p", {
+    }, "這", unit, "觸動了你命局中的桃花星（依日支／年支的三合局判斷），人際互動中會更容易被留意到，是社交與展現魅力的好時機。"), score >= 4 && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7,
         color: "#3F7A3D"
       }
-    }, CATEGORY_FAVORABLE_NOTE[key](unit)), fortune.isUnfavorable && /*#__PURE__*/React.createElement("p", {
+    }, CATEGORY_FAVORABLE_NOTE[key](unit), " ", elementalAddendum(unit, true, fortune)), score <= 2 && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7,
         color: "#B14338"
       }
-    }, CATEGORY_UNFAVORABLE_NOTE[key](unit)), !fortune.isFavorable && !fortune.isUnfavorable && /*#__PURE__*/React.createElement("p", {
+    }, CATEGORY_UNFAVORABLE_NOTE[key](unit), " ", elementalAddendum(unit, false, fortune)), score === 3 && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7,
