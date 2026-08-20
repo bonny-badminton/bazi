@@ -442,6 +442,31 @@ function HeartPulse({
     d: "M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"
   }));
 }
+function RefreshCw({
+  size = 16,
+  color = "currentColor",
+  style
+}) {
+  return /*#__PURE__*/React.createElement("svg", {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: color,
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    style: style
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M3 12a9 9 0 0 1 15-6.7L21 8"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M21 3v5h-5"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M21 12a9 9 0 0 1-15 6.7L3 16"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M8 16H3v5"
+  }));
+}
 function GraduationCap({
   size = 16,
   color = "currentColor",
@@ -1556,7 +1581,29 @@ function BaziApp() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null); // category detail expand
+  const [refreshing, setRefreshing] = useState(false);
   const isWide = useIsWide();
+  const forceRefreshApp = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    // 清除瀏覽器快取（含未來可能加入的 Service Worker／Cache Storage），
+    // 讓「加到主畫面」的網頁 App 也能抓到最新版本，而不需要手動刪除重建命盤資料。
+    try {
+      if (window.caches && caches.keys) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch (e) {}
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+    } catch (e) {}
+    const url = new URL(window.location.href);
+    url.searchParams.set("_r", Date.now().toString());
+    window.location.replace(url.toString());
+  };
   useEffect(() => {
     (async () => {
       const list = (await safeStorageGet("bazi-profiles")) || [];
@@ -1678,6 +1725,7 @@ function BaziApp() {
         input[type="date"], input[type="time"] { color-scheme: light; }
         button { font-family: inherit; cursor: pointer; }
         ::-webkit-scrollbar { display: none; }
+        @keyframes spin{to{transform:rotate(360deg)}}
       `), /*#__PURE__*/React.createElement("header", {
     style: styles.header
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -1687,12 +1735,34 @@ function BaziApp() {
       ...styles.brandTitle,
       fontSize: isWide ? 26 : 22
     }
-  }, "八字命盤")), /*#__PURE__*/React.createElement("button", {
+  }, "八字命盤")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: forceRefreshApp,
+    title: "重新整理，取得最新版本",
+    style: {
+      ...styles.addBtn,
+      background: "#fff",
+      color: "#8A8272",
+      border: "1px solid #E7E0D2",
+      paddingLeft: 10,
+      paddingRight: 10
+    }
+  }, /*#__PURE__*/React.createElement(RefreshCw, {
+    size: 15,
+    style: refreshing ? {
+      animation: "spin 1s linear infinite"
+    } : undefined
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowForm(true),
     style: styles.addBtn
   }, /*#__PURE__*/React.createElement(Plus, {
     size: 16
-  }), " 新增")), profiles.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }), " 新增"))), profiles.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: styles.profileRow
   }, profiles.map(p => /*#__PURE__*/React.createElement("button", {
     key: p.id,
