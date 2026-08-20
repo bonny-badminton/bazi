@@ -2430,7 +2430,9 @@ function FortuneSection({
       const tierIsFavorable = score >= 4;
       const tierIsUnfavorable = score <= 2;
       const noteColor = tierIsFavorable ? "#3F7A3D" : tierIsUnfavorable ? "#B14338" : "#8A8272";
-      const addendum = tierIsFavorable || tierIsUnfavorable ? elementalAddendum(unit, tierIsFavorable, fortune) : "";
+      // 五行喜用神／忌神方向是「當天全域」的判斷，同一天所有運勢項目都相同，
+      // 所以這句補充只放在「整體運勢」講一次即可，其餘項目只呈現該項目自己的十神解讀，避免重複。
+      const addendum = key === "overall" && (tierIsFavorable || tierIsUnfavorable) ? elementalAddendum(unit, tierIsFavorable, fortune) : "";
       return /*#__PURE__*/React.createElement("p", {
         style: {
           margin: "0 0 8px",
