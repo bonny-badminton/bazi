@@ -1533,6 +1533,118 @@ const ASTRO_ADVICE = {
   }
 };
 
+// 展開明細最上方的「原理說明」：解釋這個面向在占星學上主要參考哪些行星與相位，屬於固定的教育性內容。
+const ASTRO_CATEGORY_DEEPDIVE = {
+  overall: "整體運勢主要參考月亮、太陽與上升點彼此之間的相位關係——月亮代表你的情緒與日常感受，太陽代表核心自我與能量展現，上升點則代表你與外在世界互動的方式。當行運中的月亮、太陽與本命的太陽、上升點形成和諧相位（如六分相、三分相），通常代表運勢較為順遂；形成張力相位（如四分相、對分相）則容易感受到壓力或步調被打亂。",
+  wealth: "財運主要參考金星（代表價值觀、資源與吸引力）與你本命太陽、月亮之間的相位關係。金星形成和諧相位時，財務上較容易有進帳或合作機會；形成張力相位時，則容易有非預期的開銷或判斷失準的風險，理財上宜更謹慎。",
+  career: "工作運主要參考火星（代表行動力與衝勁）與太陽的相位，以及木星（代表擴張與機會）與上升點的相位。火星和諧相位有助推進計畫、展現行動力；木星和諧相位則利於獲得機會與貴人扶持。若形成張力相位，工作上容易遇到阻力或步調生變。",
+  romance: "桃花運主要參考金星（代表情感吸引力）與你本命月亮、上升點之間的相位關係。金星形成和諧相位時，魅力與吸引力較為突出，適合主動經營感情；形成張力相位時，感情面則容易有情緒起伏或誤會，互動上需要更多耐心。",
+  social: "人際運主要參考水星（代表溝通與交流）與上升點、月亮與上升點之間的相位關係。水星和諧相位有助言語表達與人際溝通；月亮與上升點的相位則影響你在人群中的情緒穩定度，形成張力相位時人際互動較容易有誤會或摩擦。",
+  health: "健康運主要參考火星（代表體力與行動力）與太陽、月亮與太陽之間的相位關係。火星和諧相位時精神體力較為旺盛；形成張力相位時則容易感到緊繃或耗損，建議多加休息、避免硬撐。",
+  study: "學業貴人運主要參考水星（代表思考與學習）與太陽的相位，以及木星（代表擴張與機會）與月亮的相位。水星和諧相位有助思路清晰、吸收力佳；木星和諧相位則利於獲得貴人提攜、把握進修考核的機會。"
+};
+
+// 行星的一般占星意涵（用於組成「這天實際發生什麼」的動態說明）
+const PLANET_THEME = {
+  sun: "自我展現與核心能量",
+  moon: "情緒起伏與內在感受",
+  mercury: "溝通表達與資訊思考",
+  venus: "人際魅力與情感連結",
+  mars: "行動力與衝勁",
+  jupiter: "擴張機會與樂觀能量"
+};
+
+// 十二星座的特質關鍵字（用於描述行運行星「行經哪個星座」帶來的氛圍）
+const ZODIAC_TRAITS = ["積極直接、行動優先", "務實穩定、重視安全感", "多變靈活、資訊量大", "重視情感歸屬、念舊", "自信展現、渴望被看見", "重視細節、講求效率", "追求平衡、重視人際和諧", "情感深刻、洞察力強", "樂觀開闊、渴望自由", "務實負責、注重紀律", "獨立創新、重視自主", "感性直覺、富同理心"];
+
+// 依「相位吉凶類型」給出各運勢項目的具體建議句，會與行星、星座組合成完整的當日動態說明
+const ASTRO_CATEGORY_ACTION = {
+  overall: {
+    harmonious: unit => `整體來看，這${unit}適合順勢而為、推進重要計畫。`,
+    tense: unit => `整體來看，這${unit}容易感受到外在壓力或步調錯亂，宜放慢腳步、避免衝動決定。`,
+    neutral: unit => `整體來看，這${unit}的能量會被放大，好的更好、緊繃的也更緊繃，宜留意自己的情緒起伏。`
+  },
+  wealth: {
+    harmonious: unit => `財務上這${unit}適合談合作、規劃投資或爭取加薪機會。`,
+    tense: unit => `財務上這${unit}容易有意外開銷或判斷失準，宜避免衝動消費與高風險決定。`,
+    neutral: unit => `財務上這${unit}的得失都會被放大，建議謹慎評估每一筆收支。`
+  },
+  career: {
+    harmonious: unit => `工作上這${unit}適合主動提案、爭取表現，容易獲得認可。`,
+    tense: unit => `工作上這${unit}容易遇到溝通摩擦或計畫生變，宜多一份耐心與彈性。`,
+    neutral: unit => `工作上這${unit}的表現會被放大檢視，宜謹慎確認每個決策的細節。`
+  },
+  romance: {
+    harmonious: unit => `感情上這${unit}魅力提升，適合主動表達心意或安排約會。`,
+    tense: unit => `感情上這${unit}容易因誤會或情緒起伏產生摩擦，互動宜多一份包容。`,
+    neutral: unit => `感情上這${unit}的情緒張力會被放大，建議留意自己與對方的真實感受。`
+  },
+  social: {
+    harmonious: unit => `人際上這${unit}氣氛融洽，適合安排聚會或拓展新的人脈。`,
+    tense: unit => `人際上這${unit}容易因言語或立場不同產生摩擦，宜多聽少說。`,
+    neutral: unit => `人際上這${unit}的互動效果會被放大，建議留意自己的言行分寸。`
+  },
+  health: {
+    harmonious: unit => `身體上這${unit}精神狀態不錯，適合安排運動或調養計畫。`,
+    tense: unit => `身體上這${unit}容易感到緊繃或疲憊，建議多休息、避免硬撐。`,
+    neutral: unit => `身體上這${unit}的狀態會被放大，宜多留意自己的精神與體力訊號。`
+  },
+  study: {
+    harmonious: unit => `學習上這${unit}思路清晰，適合把握進修、考試或簽約的機會。`,
+    tense: unit => `學習上這${unit}容易分心或與師長意見不合，宜先複習基礎、避免躁進。`,
+    neutral: unit => `學習上這${unit}的專注度會被放大，建議挑選安靜的環境學習。`
+  }
+};
+const ASTRO_CATEGORY_LABEL = {
+  overall: "整體運勢",
+  wealth: "財運",
+  career: "工作運",
+  romance: "桃花運",
+  social: "人際關係",
+  health: "健康運",
+  study: "學業貴人運"
+};
+
+// 收合狀態下的一句話摘要，只用淺顯的分數評語，技術性的行星／相位說明移到展開後呈現
+function astroSimpleSummary(key, score) {
+  return ASTRO_SCORE_TONE[key][score - 1];
+}
+
+// 就本命盤而言的個人化段落：說明「今日／今年」實際運行的行星與本命重要位置形成什麼相位
+function astroPersonalNote(key, unit, fortune) {
+  const detail = fortune.details[key];
+  if (!detail) {
+    return `這${unit}沒有特別強的行星相位牽動${ASTRO_CATEGORY_LABEL[key]}，暫不受明顯的行運牽動，可依日常步調進行即可。`;
+  }
+  const {
+    transitKey,
+    natalKey,
+    aspect
+  } = detail;
+  const transitSign = fortune.transits[transitKey];
+  return `就你的星座命盤而言，這${unit}運行的${PLANET_LABEL[transitKey]}行經${transitSign.sign}，與你的${NATAL_LABEL[natalKey]}形成「${aspect.name}」：${ASPECT_EFFECT[aspect.type]}。`;
+}
+
+// 展開明細最下方的動態總結：組合「行運行星＋行星所在星座特質＋相位吉凶＋對應運勢項目的具體建議」，
+// 會隨著實際行運（例如今天水星在雙子、明天火星在巨蟹）與相位不同而呈現不同內容，而不是套用固定模板。
+function astroDynamicNote(key, unit, fortune) {
+  const detail = fortune.details[key];
+  if (!detail) {
+    const moon = fortune.moonSign;
+    const trait = ZODIAC_TRAITS[moon.signIdx];
+    return `這${unit}月亮行經${moon.sign}，帶著${trait}的氛圍，但沒有特別強的相位牽動${ASTRO_CATEGORY_LABEL[key]}，整體平穩，可依日常步調進行即可。`;
+  }
+  const {
+    transitKey,
+    aspect
+  } = detail;
+  const transitSign = fortune.transits[transitKey];
+  const trait = ZODIAC_TRAITS[transitSign.signIdx];
+  const theme = PLANET_THEME[transitKey];
+  const guidance = ASTRO_CATEGORY_ACTION[key][aspect.type](unit);
+  return `這${unit}${PLANET_LABEL[transitKey]}行經${transitSign.sign}，${theme}的能量沾染上${trait}的色彩。${guidance}`;
+}
+
 /* ============================================================
    小工具 UI helpers
    ============================================================ */
@@ -2847,9 +2959,7 @@ function AstroFortuneSection({
   }) => {
     const score = fortune.scores[key];
     const isOpen = expanded === key;
-    const detail = fortune.details[key];
-    const aspectSentence = detail ? `今日運行的${PLANET_LABEL[detail.transitKey]}與你的${NATAL_LABEL[detail.natalKey]}形成「${detail.aspect.name}」，${ASPECT_EFFECT[detail.aspect.type]}。` : "今天沒有特別強的行星相位牽動這個領域，運勢平穩、按日常步調進行即可。";
-    const summary = [ASTRO_SCORE_TONE[key][score - 1], aspectSentence].join("");
+    const summary = astroSimpleSummary(key, score);
     return /*#__PURE__*/React.createElement("div", {
       key: key,
       style: styles.fortuneCard
@@ -2888,13 +2998,29 @@ function AstroFortuneSection({
         margin: "0 0 8px",
         lineHeight: 1.7
       }
-    }, "這個面向主要參考", key === "career" || key === "study" ? "水星／木星／火星" : key === "romance" || key === "wealth" ? "金星" : "月亮", "與你本命重要位置的相位關係，並綜合行星本身的吉凶屬性（金星、木星傳統上偏吉；火星、土星傳統上偏具挑戰性）判斷。"), !fortune.hasRealAsc && (key === "career" || key === "social" || key === "romance") && /*#__PURE__*/React.createElement("p", {
+    }, ASTRO_CATEGORY_DEEPDIVE[key]), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, astroPersonalNote(key, unit, fortune)), !fortune.hasRealAsc && (key === "career" || key === "social" || key === "romance") && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7,
         color: "#A85D2E"
       }
-    }, "此面向通常會參考「上升點」，但目前命盤缺少出生地經緯度，暫以太陽位置替代計算，補齊出生地資訊後分析會更精準。")));
+    }, "此面向通常會參考「上升點」，但目前命盤缺少出生地經緯度，暫以太陽位置替代計算，補齊出生地資訊後分析會更精準。"), (() => {
+      const tierIsFavorable = score >= 4;
+      const tierIsUnfavorable = score <= 2;
+      const noteColor = tierIsFavorable ? "#3F7A3D" : tierIsUnfavorable ? "#B14338" : "#8A8272";
+      return /*#__PURE__*/React.createElement("p", {
+        style: {
+          margin: "0 0 8px",
+          lineHeight: 1.7,
+          color: noteColor
+        }
+      }, astroDynamicNote(key, unit, fortune));
+    })()));
   })), /*#__PURE__*/React.createElement("div", {
     style: styles.yijiCard
   }, /*#__PURE__*/React.createElement("div", {
