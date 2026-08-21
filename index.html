@@ -970,8 +970,14 @@ function buildAstroFortune(natal, transitDateUTC, unit) {
   Object.entries(ASTRO_CATEGORY_PAIRS).forEach(([cat, pairs]) => {
     let score = 3;
     let strongest = null;
+    const pairResults = [];
     pairs.forEach(([tKey, nKey]) => {
       const aspect = findAspect(transits[tKey].lon, natalRef[nKey]);
+      pairResults.push({
+        transitKey: tKey,
+        natalKey: nKey,
+        aspect
+      });
       if (aspect) {
         score += aspectScoreDelta(tKey, aspect);
         if (!strongest || aspect.delta < strongest.aspect.delta) strongest = {
@@ -982,7 +988,10 @@ function buildAstroFortune(natal, transitDateUTC, unit) {
       }
     });
     scores[cat] = Math.max(1, Math.min(5, Math.round(score)));
-    details[cat] = strongest;
+    details[cat] = {
+      pairs: pairResults,
+      strongest
+    };
   });
   const moonSign = transits.moon;
   const headline = `${PLANET_LABEL.moon}在${moonSign.sign}`;
@@ -1146,6 +1155,35 @@ const HEALTH_MAP = {
   土: "脾胃、消化系統、肌肉",
   金: "肺部、呼吸系統、皮膚",
   水: "腎臟、泌尿系統、內分泌"
+};
+
+// 五行生活建議：對應的顏色、飾品材質、適合的生活／居家環境，用於「五行生活建議」區塊
+const ELEMENT_LIFESTYLE = {
+  木: {
+    colors: "綠色、青色、卡其色系",
+    materials: "木質、藤編、綠色系寶石（如東陵玉、綠幽靈）",
+    environment: "靠近植栽綠意的空間，書桌或座位朝東，平時多接觸大自然、多走動伸展"
+  },
+  火: {
+    colors: "紅色、橙色、紫色",
+    materials: "紅色系寶石（如紅瑪瑙、石榴石）、皮革製品",
+    environment: "採光充足、溫暖明亮的空間，座位朝南，適合多曬太陽、參與熱鬧的活動"
+  },
+  土: {
+    colors: "黃色、棕色、大地色系",
+    materials: "陶瓷、玉石、黃水晶",
+    environment: "格局方正、厚實穩定的居家環境，減少頻繁搬遷或大幅變動"
+  },
+  金: {
+    colors: "白色、金色、銀色",
+    materials: "金屬飾品、白水晶、鑽石",
+    environment: "簡潔俐落、線條感強的空間，座位朝西，適合井然有序的生活步調"
+  },
+  水: {
+    colors: "黑色、深藍色、灰色",
+    materials: "水晶、珍珠、玻璃製品",
+    environment: "靠近水源或有流動感的空間（如魚缸、噴水造景），座位朝北，適合彈性、多變化的步調"
+  }
 };
 
 // 各面向的五行原理深入解說（展開時顯示）
@@ -1476,6 +1514,40 @@ function elementalAddendum(unit, tierIsFavorable, fortune) {
   return "";
 }
 
+// 地支宮位沖合的補充說明：運勢分數與「就你的命盤而言」段落雖然已經把當天地支的沖合關係算進去，
+// 但底部總結原本只依當天天干形成的十神組字，沒有明講地支的作用；這裡針對每個運勢項目對應的宮位，
+// 額外補上一句地支沖合的具體影響，讓「不同天地支不同、結果也不同」這件事在文字上更明確。
+function branchDynamicNote(key, unit, fortune) {
+  const rel = fortune.palaceRelations;
+  if (!rel) return "";
+  if (key === "wealth") {
+    if (rel.yearRel.clash || rel.monthRel.clash) return `加上這${unit}的地支與根基宮或事業宮相沖，財源穩定度容易受到牽動，理財上更要留意。`;
+    if (rel.yearRel.combo || rel.monthRel.combo) return `加上這${unit}的地支與根基宮或事業宮相合，財源相對穩定，適合安心規劃。`;
+    return "";
+  }
+  if (key === "career") {
+    if (rel.monthRel.combo) return `加上這${unit}的地支與事業／父母宮相合，工作推進與貴人支持較順。`;
+    if (rel.monthRel.clash) return `加上這${unit}的地支與事業／父母宮相沖，工作或計畫上較易生變動，宜多預留彈性。`;
+    return "";
+  }
+  if (key === "romance") {
+    if (rel.dayRel.combo) return `加上這${unit}的地支與自身／配偶宮相合，感情互動較為和諧。`;
+    if (rel.dayRel.clash) return `加上這${unit}的地支與自身／配偶宮相沖，情緒與感情面較易有起伏，互動宜多包容。`;
+    return "";
+  }
+  if (key === "social") {
+    if (rel.yearRel.combo) return `加上這${unit}的地支與根基／社交宮相合，人脈與長輩助力較順。`;
+    if (rel.yearRel.clash) return `加上這${unit}的地支與根基／社交宮相沖，和長輩或原生環境的互動較易生摩擦。`;
+    return "";
+  }
+  if (key === "study") {
+    if (rel.monthRel.combo) return `加上這${unit}的地支與事業／父母宮相合，文書與貴人運較順，適合把握進修機會。`;
+    if (rel.monthRel.clash) return `加上這${unit}的地支與事業／父母宮相沖，學習或考核上較易分心，宜先複習基礎。`;
+    return "";
+  }
+  return "";
+}
+
 // 收合狀態下的一句話摘要，統一使用淺顯的分數評語，避免夾雜十神、五行、宮位等術語
 function fortuneSimpleSummary(key, score) {
   return SCORE_TONE[key][score - 1];
@@ -1486,7 +1558,7 @@ const SCORE_TONE = {
   career: ["進度容易拖延，宜先守成再求突破。", "工作步調平緩，按部就班。", "表現穩健，可穩步推進手邊計畫。", "有貴人相助，適合主動爭取機會。", "表現亮眼，適合展現實力、爭取曝光。"],
   romance: ["感情能量偏低，適合獨處沉澱。", "感情面平淡無波。", "關係穩定，維持現有步調即可。", "桃花微動，多留意身邊互動對象。", "桃花旺盛，適合主動表達心意或邀約。"],
   social: ["人際上容易有口角，建議先退一步。", "人際互動平平，沒有特別波動。", "與人相處和睦，氣氛融洽。", "人緣加分，適合安排聚會或社交場合。", "貴人雲集、人氣旺盛，適合拓展人脈。"],
-  health: ["身體訊號較弱，宜多休息、避免硬撐。", "健康狀況平穩，維持regular作息即可。", "體力與精神狀態中等，量力而為。", "精神狀態不錯，適合安排運動或調養。", "氣血通暢，是調整體質、養成好習慣的好時機。"],
+  health: ["身體訊號較弱，宜多休息、避免硬撐。", "健康狀況平穩，維持規律作息即可。", "體力與精神狀態中等，量力而為。", "精神狀態不錯，適合安排運動或調養。", "氣血通暢，是調整體質、養成好習慣的好時機。"],
   study: ["學習或考核運偏弱，宜先複習基礎、避免躁進。", "學業表現平平，按進度前進即可。", "學習狀態穩定，吸收力中等。", "貴人運不錯，適合請益師長或前輩。", "文書、考試、進修運都旺，適合把握機會。"]
 };
 
@@ -1610,39 +1682,65 @@ function astroSimpleSummary(key, score) {
   return ASTRO_SCORE_TONE[key][score - 1];
 }
 
-// 就本命盤而言的個人化段落：說明「今日／今年」實際運行的行星與本命重要位置形成什麼相位
+// 就本命盤而言的個人化段落：完整列出這個運勢項目實際參考的「每一組」行運行星與本命位置的關係，
+// 而不是只挑分數影響最大的一組——這樣即使某一組今天沒有形成明顯相位，也會清楚交代「有檢查、但沒有觸發」，
+// 不會讓人誤以為分析漏看了某顆行星。
 function astroPersonalNote(key, unit, fortune) {
   const detail = fortune.details[key];
-  if (!detail) {
-    return `這${unit}沒有特別強的行星相位牽動${ASTRO_CATEGORY_LABEL[key]}，暫不受明顯的行運牽動，可依日常步調進行即可。`;
+  const pairs = detail && detail.pairs ? detail.pairs : [];
+  if (!pairs.length) return "";
+  const sentences = pairs.map(({
+    transitKey,
+    natalKey,
+    aspect
+  }) => {
+    const transitSign = fortune.transits[transitKey];
+    if (aspect) {
+      return `運行的${PLANET_LABEL[transitKey]}行經${transitSign.sign}，與你的${NATAL_LABEL[natalKey]}形成「${aspect.name}」（${ASPECT_EFFECT[aspect.type]}）`;
+    }
+    return `運行的${PLANET_LABEL[transitKey]}目前行經${transitSign.sign}，與你的${NATAL_LABEL[natalKey]}角度不構成明顯相位，暫不特別牽動這個面向`;
+  });
+  return `就你的星座命盤而言，這${unit}${sentences.join("；")}。`;
+}
+
+// 展開明細最下方的動態總結：每個運勢項目各自使用不同的句型結構（而不是統一套「行經＋沾染上⋯⋯色彩」的模板），
+// 並直接點出對應的本命位置與相位名稱，讓內容在文字結構與資訊上都更有辨識度，不會讀起來像罐頭文字。
+const ASTRO_CATEGORY_TEMPLATE = {
+  overall: (unit, planetLabel, sign, trait, natalLabel, aspect, effect, guidance) => `這${unit}${planetLabel}運行至${sign}，${trait}的氣息瀰漫在你整體的氣場中，與你的${natalLabel}形成「${aspect}」：${effect}。${guidance}`,
+  wealth: (unit, planetLabel, sign, trait, natalLabel, aspect, effect, guidance) => `${planetLabel}這${unit}行經${sign}，你對金錢與資源的判斷容易帶著${trait}的傾向，此刻它與你的${natalLabel}形成「${aspect}」：${effect}。${guidance}`,
+  career: (unit, planetLabel, sign, trait, natalLabel, aspect, effect, guidance) => `這${unit}職場氣場受到${planetLabel}行經${sign}牽動，行事風格偏向${trait}，與你的${natalLabel}形成「${aspect}」：${effect}。${guidance}`,
+  romance: (unit, planetLabel, sign, trait, natalLabel, aspect, effect, guidance) => `${planetLabel}悄悄行經${sign}，讓這${unit}的情感表現多了幾分${trait}，恰好與你的${natalLabel}形成「${aspect}」：${effect}。${guidance}`,
+  social: (unit, planetLabel, sign, trait, natalLabel, aspect, effect, guidance) => `這${unit}人際場域因${planetLabel}行經${sign}而染上${trait}的氛圍，與你的${natalLabel}形成「${aspect}」：${effect}。${guidance}`,
+  health: (unit, planetLabel, sign, trait, natalLabel, aspect, effect, guidance) => `${planetLabel}行經${sign}，為這${unit}的身體能量帶來${trait}的調性，與你的${natalLabel}形成「${aspect}」：${effect}。${guidance}`,
+  study: (unit, planetLabel, sign, trait, natalLabel, aspect, effect, guidance) => `這${unit}學習思維受到${planetLabel}行經${sign}影響，帶著${trait}的色彩，與你的${natalLabel}形成「${aspect}」：${effect}。${guidance}`
+};
+// 完全沒有形成明顯相位時的備援句，同樣依運勢項目各自有不同的句型與著重點，並以月亮所在星座增添一點當日氛圍變化。
+const ASTRO_CATEGORY_FALLBACK_TEMPLATE = {
+  overall: (unit, sign, trait) => `這${unit}沒有特別強的行星相位牽動整體運勢，月亮行經${sign}，帶著${trait}的氛圍，可依日常步調進行即可。`,
+  wealth: (unit, sign, trait) => `這${unit}沒有特別強的行星相位牽動財運，月亮行經${sign}，財務判斷大致帶著${trait}的基調，維持原有理財步調即可。`,
+  career: (unit, sign, trait) => `這${unit}沒有特別強的行星相位牽動工作運，月亮行經${sign}，工作步調大致帶著${trait}的基調，可依原訂計畫穩定推進。`,
+  romance: (unit, sign, trait) => `這${unit}沒有特別強的行星相位牽動桃花運，月亮行經${sign}，感情氛圍大致帶著${trait}的基調，順其自然即可。`,
+  social: (unit, sign, trait) => `這${unit}沒有特別強的行星相位牽動人際運，月亮行經${sign}，人際互動大致帶著${trait}的基調，一如往常即可。`,
+  health: (unit, sign, trait) => `這${unit}沒有特別強的行星相位牽動健康運，月亮行經${sign}，身心狀態大致帶著${trait}的基調，維持規律作息即可。`,
+  study: (unit, sign, trait) => `這${unit}沒有特別強的行星相位牽動學業貴人運，月亮行經${sign}，學習狀態大致帶著${trait}的基調，按部就班進行即可。`
+};
+function astroDynamicNote(key, unit, fortune) {
+  const detail = fortune.details[key];
+  const strongest = detail ? detail.strongest : null;
+  if (!strongest) {
+    const moon = fortune.moonSign;
+    const trait = ZODIAC_TRAITS[moon.signIdx];
+    return ASTRO_CATEGORY_FALLBACK_TEMPLATE[key](unit, moon.sign, trait);
   }
   const {
     transitKey,
     natalKey,
     aspect
-  } = detail;
-  const transitSign = fortune.transits[transitKey];
-  return `就你的星座命盤而言，這${unit}運行的${PLANET_LABEL[transitKey]}行經${transitSign.sign}，與你的${NATAL_LABEL[natalKey]}形成「${aspect.name}」：${ASPECT_EFFECT[aspect.type]}。`;
-}
-
-// 展開明細最下方的動態總結：組合「行運行星＋行星所在星座特質＋相位吉凶＋對應運勢項目的具體建議」，
-// 會隨著實際行運（例如今天水星在雙子、明天火星在巨蟹）與相位不同而呈現不同內容，而不是套用固定模板。
-function astroDynamicNote(key, unit, fortune) {
-  const detail = fortune.details[key];
-  if (!detail) {
-    const moon = fortune.moonSign;
-    const trait = ZODIAC_TRAITS[moon.signIdx];
-    return `這${unit}月亮行經${moon.sign}，帶著${trait}的氛圍，但沒有特別強的相位牽動${ASTRO_CATEGORY_LABEL[key]}，整體平穩，可依日常步調進行即可。`;
-  }
-  const {
-    transitKey,
-    aspect
-  } = detail;
+  } = strongest;
   const transitSign = fortune.transits[transitKey];
   const trait = ZODIAC_TRAITS[transitSign.signIdx];
-  const theme = PLANET_THEME[transitKey];
   const guidance = ASTRO_CATEGORY_ACTION[key][aspect.type](unit);
-  return `這${unit}${PLANET_LABEL[transitKey]}行經${transitSign.sign}，${theme}的能量沾染上${trait}的色彩。${guidance}`;
+  return ASTRO_CATEGORY_TEMPLATE[key](unit, PLANET_LABEL[transitKey], transitSign.sign, trait, NATAL_LABEL[natalKey], aspect.name, ASPECT_EFFECT[aspect.type], guidance);
 }
 
 /* ============================================================
@@ -2325,7 +2423,50 @@ function BaziCard({
       fontSize: 11,
       color: "#A79C86"
     }
-  }, "此為簡化的「扶抑」判斷法，實際專業論命還會考慮月令、通關、調候等更多因素，僅供日常參考。"))));
+  }, "此為簡化的「扶抑」判斷法，實際專業論命還會考慮月令、通關、調候等更多因素，僅供日常參考。")), strength && (() => {
+    const favEls = [...new Set(strength.favorable)];
+    const abundantEls = Object.entries(counts).filter(([, n]) => n === maxCount && maxCount > 0).map(([el]) => el);
+    return /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlock
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlockTitle
+    }, "五行生活建議"), favEls.map(el => /*#__PURE__*/React.createElement("div", {
+      key: el,
+      style: {
+        marginBottom: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 3
+      }
+    }, /*#__PURE__*/React.createElement(ElementTag, {
+      el: el,
+      small: true
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "為你的喜用五行，適合在生活中多接觸")), /*#__PURE__*/React.createElement("p", {
+      style: styles.subBlockText
+    }, "顏色：", ELEMENT_LIFESTYLE[el].colors, "；飾品材質：", ELEMENT_LIFESTYLE[el].materials, "；環境：", ELEMENT_LIFESTYLE[el].environment, "。"))), abundantEls.length > 0 && /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: favEls.length ? 4 : 0,
+        color: "#A79C86"
+      }
+    }, "另外，你命局中「", abundantEls.join("、"), "」的比例已經是命局中最高的，日常生活不需要再刻意加強這個屬性，維持現狀即可，可以把心力放在補強上方的喜用五行。"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "五行生活建議屬於傳統命理的日常參考，主要用於調整生活中的小細節與氛圍，不涉及醫療、風水或財務效果的保證。"));
+  })()));
 }
 
 /* ---------------- Date / Year switchers ---------------- */
@@ -2545,13 +2686,15 @@ function FortuneSection({
       // 五行喜用神／忌神方向是「當天全域」的判斷，同一天所有運勢項目都相同，
       // 所以這句補充只放在「整體運勢」講一次即可，其餘項目只呈現該項目自己的十神解讀，避免重複。
       const addendum = key === "overall" && (tierIsFavorable || tierIsUnfavorable) ? elementalAddendum(unit, tierIsFavorable, fortune) : "";
+      // 地支宮位沖合的補充：讓底部總結也明確反映「當天地支」對這個運勢項目的實際影響，而不只是天干十神。
+      const branchNote = branchDynamicNote(key, unit, fortune);
       return /*#__PURE__*/React.createElement("p", {
         style: {
           margin: "0 0 8px",
           lineHeight: 1.7,
           color: noteColor
         }
-      }, godNote, addendum ? " " + addendum : "");
+      }, godNote, branchNote ? " " + branchNote : "", addendum ? " " + addendum : "");
     })()));
   })), /*#__PURE__*/React.createElement("div", {
     style: styles.yijiCard
