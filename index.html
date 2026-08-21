@@ -1035,6 +1035,157 @@ function computeAstroCycles(natal, birthYear) {
   }
   return periods;
 }
+// 地支藏干對照表：每個地支所藏的天干與權重（本氣權重最高，中氣、餘氣次之），
+// 用於計算「整張命盤」的十神分布，而不只是四柱天干本身。權重為簡化估算，僅供分析參考。
+const BRANCH_HIDDEN_STEMS = [
+  [{
+    stem: 9,
+    w: 1
+  }],
+  // 子：癸
+  [{
+    stem: 5,
+    w: 0.6
+  }, {
+    stem: 9,
+    w: 0.3
+  }, {
+    stem: 7,
+    w: 0.1
+  }],
+  // 丑：己、癸、辛
+  [{
+    stem: 0,
+    w: 0.6
+  }, {
+    stem: 2,
+    w: 0.3
+  }, {
+    stem: 4,
+    w: 0.1
+  }],
+  // 寅：甲、丙、戊
+  [{
+    stem: 1,
+    w: 1
+  }],
+  // 卯：乙
+  [{
+    stem: 4,
+    w: 0.6
+  }, {
+    stem: 1,
+    w: 0.3
+  }, {
+    stem: 9,
+    w: 0.1
+  }],
+  // 辰：戊、乙、癸
+  [{
+    stem: 2,
+    w: 0.6
+  }, {
+    stem: 6,
+    w: 0.3
+  }, {
+    stem: 4,
+    w: 0.1
+  }],
+  // 巳：丙、庚、戊
+  [{
+    stem: 3,
+    w: 0.7
+  }, {
+    stem: 5,
+    w: 0.3
+  }],
+  // 午：丁、己
+  [{
+    stem: 5,
+    w: 0.6
+  }, {
+    stem: 3,
+    w: 0.3
+  }, {
+    stem: 1,
+    w: 0.1
+  }],
+  // 未：己、丁、乙
+  [{
+    stem: 6,
+    w: 0.6
+  }, {
+    stem: 8,
+    w: 0.3
+  }, {
+    stem: 4,
+    w: 0.1
+  }],
+  // 申：庚、壬、戊
+  [{
+    stem: 7,
+    w: 1
+  }],
+  // 酉：辛
+  [{
+    stem: 4,
+    w: 0.6
+  }, {
+    stem: 7,
+    w: 0.3
+  }, {
+    stem: 3,
+    w: 0.1
+  }],
+  // 戌：戊、辛、丁
+  [{
+    stem: 8,
+    w: 0.7
+  }, {
+    stem: 0,
+    w: 0.3
+  }] // 亥：壬、甲
+];
+const TEN_GODS_LIST = ["比肩", "劫財", "食神", "傷官", "偏財", "正財", "七殺", "正官", "偏印", "正印"];
+
+// 計算「整張命盤」的十神分布（年、月、時天干 + 年月日時地支藏干，皆相對於日主計算，權重加總）。
+// 日主本身的天干不計入（無法對自己論十神），日支等其餘地支一律採藏干加權計算。
+// 用於工作事業適配、財運分類這類「看整張命盤格局」的靜態分析，區別於逐日／逐年的流運分析。
+function computeNatalTenGodProfile(bazi) {
+  const dm = bazi.day.stemIdx;
+  const profile = {};
+  TEN_GODS_LIST.forEach(g => profile[g] = 0);
+  const stemPillars = [bazi.year.stemIdx, bazi.month.stemIdx, bazi.hour.stemIdx];
+  stemPillars.forEach(idx => {
+    if (idx === undefined || idx === null) return;
+    profile[tenGod(dm, idx)] += 1;
+  });
+  const branchPillars = [bazi.year.branchIdx, bazi.month.branchIdx, bazi.day.branchIdx, bazi.hour.branchIdx];
+  branchPillars.forEach(bIdx => {
+    if (bIdx === undefined || bIdx === null) return;
+    BRANCH_HIDDEN_STEMS[bIdx].forEach(({
+      stem,
+      w
+    }) => {
+      profile[tenGod(dm, stem)] += w;
+    });
+  });
+  const groups = {
+    比劫: profile.比肩 + profile.劫財,
+    食傷: profile.食神 + profile.傷官,
+    財: profile.正財 + profile.偏財,
+    官殺: profile.正官 + profile.七殺,
+    印: profile.偏印 + profile.正印
+  };
+  const sortedGods = [...TEN_GODS_LIST].sort((a, b) => profile[b] - profile[a]);
+  return {
+    profile,
+    groups,
+    topGod: sortedGods[0],
+    secondGod: sortedGods[1]
+  };
+}
+
 function tenGod(dayMasterIdx, otherStemIdx) {
   if (dayMasterIdx === otherStemIdx) return "比肩";
   const dmEl = STEM_ELEMENT[dayMasterIdx],
@@ -1133,6 +1284,56 @@ const ADVICE = {
     ji: ["懶散拖延"]
   }
 };
+
+// 工作事業適配：依「整張命盤」十神分布中力量最強的十神，判斷適合的產業、職務型態
+// （上班族／接案／創業／個人品牌）與是否適合擔任主管，屬於長期性格傾向分析，
+// 與逐日／逐年的流運分析（CATEGORY_GOD_NOTE）性質不同，不應混用。
+const CAREER_FIT_TEXT = {
+  比肩: "你重視公平與自主，適合團隊合作但不喜歡被過度管束的工作型態，例如業務、專案制工作、或需要與同儕協作的角色。比起純粹的上班族，你在有一定自主空間、能與夥伴平起平坐的環境裡表現更好；創業或合夥也是選項，但股權與分工務必事先講清楚。當主管時，你的領導風格偏向扁平化、以身作則，而非威權式管理。",
+  劫財: "你行動力強、敢於競爭，適合業務、銷售、需要積極開拓的工作。比肩劫財旺的人通常不甘於長期屈居人下，比起穩定的上班族生涯，你可能更適合接案、業務抽成制或自行創業；但劫財也代表破財與合夥風險偏高，若考慮創業或合夥，股權分配、借貸往來務必白紙黑字寫清楚，避免因人情而讓財務受損。當主管時你敢衝敢拼，但要留意團隊向心力的經營。",
+  食神: "你的才華與親和力是資產，適合創意、餐飲、設計、教學、內容創作這類需要輸出個人風格、氣氛輕鬆的領域。上班族、接案或經營個人品牌都適合你，尤其是能發揮興趣專長的工作最容易做得長久；你比較不擅長高壓對抗的職場文化。當主管時你會是照顧型、氣氛營造型的領導者，但面對強硬的競爭場面可能需要多練習。",
+  傷官: "你聰明、表達力強、有自己的想法，適合創意、行銷、自媒體、設計等需要展現個人風格與才華的領域，也適合站在第一線發聲的角色（如業務、講師、公關）。傷官旺的人通常不喜歡被制式框架綁住，比起長期待在同一間公司當上班族，你更容易在接案、自由工作或經營個人品牌中發揮所長；創業也是不錯的選項。當主管方面，你有能力也有想法，但要留意言辭直接容易與上級或客戶產生摩擦，圓融的表達方式會讓路走得更順。",
+  正財: "你對「穩定累積」特別有感，適合實體貿易、零售、財務會計、資產管理這類需要長期經營與精算的行業。上班族、穩定職務對你來說都能發揮優勢，也適合按部就班升遷、累積資歷；創業的話較適合先從穩健的實體或服務業入手，而非高風險的投機領域。當主管時你務實可靠，是部屬信任的類型，適合中長期穩健地帶團隊。",
+  偏財: "你對機會敏銳、人脈廣、商業嗅覺強，適合業務、投資、貿易、多元副業、自由接案這類彈性高、收入來源多元的路線。比起朝九晚五的固定職，你在能主導資源調度、彈性安排時間的角色裡更容易發揮；創業、身兼多份收入來源、經營個人品牌都很適合你。當主管時你敢於嘗試新機會，但也要留意收入不穩定期間的現金流管理，避免把資源分散得太薄。",
+  七殺: "你抗壓性強、決斷力夠，適合高壓、變動快、需要當機立斷的領域，例如業務主管、新創團隊、需要衝鋒陷陣或處理危機的角色。你天生適合當主管、甚至更適合開創型的領導角色而非單純守成；創業對你來說也是相當合適的路，尤其在需要快速應變的產業。但要留意用人處事別過於強硬，給團隊多一點喘息與溝通的空間，會讓你走得更長久。",
+  正官: "你天生適合有明確位階、規則清楚的組織，例如公部門、大型企業、專業技術職。穩紮穩打累積資歷很容易獲得升遷與肯定，是最適合走管理職的類型之一——你重視制度與責任感，能建立部屬對你的信任。比起自由接案或創業的高不確定性，你在建制完整的組織裡更容易發光發熱；如果要創業，也建議選擇制度化、可規模化的模式，而非完全彈性隨機的接案型態。",
+  偏印: "你的思維獨特、偏好非主流或深度鑽研的專業路線，適合研究、命理／心理諮商、特殊技術、小眾深度領域。比起大型團隊合作，你更適合獨立作業、接案或經營小型專業工作室，能完全發揮你的獨到見解；長期待在制式的大型組織裡可能會覺得綁手綁腳。當主管未必是你的首選，你可能更享受成為某個領域的獨門專家，而非管理眾人的行政工作。",
+  正印: "你適合需要專業累積、被信任與依賴的角色，例如教育、醫療、顧問、行政幕僚、研發這類需要長期學習與資歷加持的領域。上班族、穩定的專業職務很適合你，你善於累積口碑與資歷，時間會是你的朋友；創業的話較適合走專業服務、顧問型態，而非快節奏的商業競爭。當主管時你適合擔任教練型、輔導型的領導者，善於培養部屬成長。"
+};
+
+// 財運分類：依命盤中正財／偏財的相對強弱，判斷財富的主要型態與來源；
+// 並額外檢查「比劫是否明顯強過財星」（傳統上的漏財傾向）、
+// 以及「食傷生財」「財官相生」這兩種常見的生財路徑是否成立。
+const WEALTH_TYPE_TEXT = {
+  正財為主: "你命局中的財星以「正財」為主，代表你的財運屬於穩紮穩打型：透過本業收入、穩定職務、房地產或長期經營逐步累積財富，比起一夕致富，你更容易靠時間與紀律把財富做大。理財上適合儲蓄、穩健投資，避免把資金押在高風險、快進快出的標的上。",
+  偏財為主: "你命局中的財星以「偏財」為主，代表你的財運屬於機會導向型：業務抽成、投資、跨界合作、多元副業都容易為你帶來額外收入，人脈與商業嗅覺是你的財運關鍵。理財上你適合保持多元收入來源，但也要留意偏財的波動性較大，建議預留穩定的緊急預備金，避免把所有雞蛋放在同一個籃子裡。",
+  正偏財皆旺: "你命局中正財、偏財力量都不弱，代表你同時具備穩定收入與機會財的雙重優勢：本業收入可以打底，額外的投資、副業、人脈機會則能為你加分。理財上建議把資金分成「穩健」與「機會」兩部分分開配置，兩邊互相平衡、互不干擾。",
+  財星不顯: "你命局中財星（正財、偏財）的力量相對不明顯，這不代表你賺不到錢，而是財富通常不會「主動找上你」，比較需要透過其他管道間接帶動：例如靠專業才華與輸出、或靠職位與權責的提升來間接帶動財運，也常常需要仰賴大運流年補進財星的階段才會有比較明顯的進帳。建議把重心放在提升專業能力與職位，財富自然會跟著上來，同時可以留意每個階段的大運流年是否補進財星，那會是財運相對明顯轉強的時間點。"
+};
+const WEALTH_LEAK_NOTE = "另外，你命局中比肩、劫財的力量相對財星明顯偏旺，這種「財弱比劫旺」的組合，傳統上容易有破財、借貸糾紛或合夥拆帳不清的風險。理財上建議避免大方借錢給朋友、謹慎簽署連帶保證，重要的金錢往來務必白紙黑字寫清楚。";
+const WEALTH_SOURCE_NOTE = {
+  食傷生財: "值得一提的是，你命局中食神、傷官與財星同時具備一定力量，形成傳統上稱為「食傷生財」的組合，代表你的財富很適合透過個人才華、創意輸出或經營副業來實現，例如接案、自媒體、產品開發等——你的專業能力本身就是很直接的生財工具。",
+  財官相生: "值得一提的是，你命局中官殺與財星同時具備一定力量，形成傳統上稱為「財官相生」的組合，代表你的財富容易伴隨職位與權責的提升而來——認真在本業或專業領域往上爬，財富往往會跟著到位。"
+};
+
+// 依十神分布判斷財運分類、漏財傾向、生財路徑
+function analyzeWealthType(tenGodProfile) {
+  const {
+    profile,
+    groups
+  } = tenGodProfile;
+  const wealthTotal = groups.財;
+  let typeKey;
+  if (wealthTotal < 0.3) typeKey = "財星不顯";else if (profile.正財 >= profile.偏財 * 1.3) typeKey = "正財為主";else if (profile.偏財 >= profile.正財 * 1.3) typeKey = "偏財為主";else typeKey = "正偏財皆旺";
+  const leakWarning = groups.比劫 > wealthTotal * 1.5 && groups.比劫 > 1.2;
+  let sourcePattern = null;
+  if (groups.食傷 > 0.8 && wealthTotal > 0.3) sourcePattern = "食傷生財";else if (groups.官殺 > 0.8 && wealthTotal > 0.3) sourcePattern = "財官相生";
+  return {
+    typeKey,
+    leakWarning,
+    sourcePattern
+  };
+}
 
 // 性格特質：依日主天干
 const PERSONALITY = {
@@ -2121,9 +2322,7 @@ function BaziApp() {
     expanded: expanded,
     setExpanded: setExpanded,
     isWide: isWide
-  })), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(MultiYearForecastSection, {
-    bazi: bazi
-  }), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(DayunSection, {
+  })), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(DayunSection, {
     dayun: dayun,
     bazi: bazi,
     birthYear: active.birth.y,
@@ -2468,6 +2667,54 @@ function BaziCard({
         color: "#A79C86"
       }
     }, "五行生活建議屬於傳統命理的日常參考，主要用於調整生活中的小細節與氛圍，不涉及醫療、風水或財務效果的保證。"));
+  })(), (() => {
+    const tgProfile = computeNatalTenGodProfile(bazi);
+    const wealthInfo = analyzeWealthType(tgProfile);
+    const secondNotable = tgProfile.secondGod && tgProfile.profile[tgProfile.secondGod] >= tgProfile.profile[tgProfile.topGod] * 0.6;
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlock
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlockTitle
+    }, "工作事業適配"), /*#__PURE__*/React.createElement("p", {
+      style: styles.subBlockText
+    }, "你命局中力量最強的十神是「", tgProfile.topGod, "」。", CAREER_FIT_TEXT[tgProfile.topGod]), secondNotable && /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        color: "#A79C86"
+      }
+    }, "此外，你命局中「", tgProfile.secondGod, "」（", TEN_GOD_INFO[tgProfile.secondGod].tag, "）的力量也不弱：", TEN_GOD_INFO[tgProfile.secondGod].desc, "這也會為你的職涯增添一些不同的色彩，不必只用單一類型侷限自己。"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "此分析採用簡化的整張命盤十神分布估算（含四柱地支藏干加權），主要反映性格傾向與適配方向，實際職涯選擇仍會受個人興趣、學經歷、大運流年等因素共同影響。")), /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlock
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlockTitle
+    }, "財運分類"), /*#__PURE__*/React.createElement("p", {
+      style: styles.subBlockText
+    }, WEALTH_TYPE_TEXT[wealthInfo.typeKey]), wealthInfo.sourcePattern && /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8
+      }
+    }, WEALTH_SOURCE_NOTE[wealthInfo.sourcePattern]), wealthInfo.leakWarning && /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        color: "#B14338"
+      }
+    }, WEALTH_LEAK_NOTE), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "財運分類屬於傳統命理的日常參考與自我探索工具，不構成投資理財建議，實際財務決策仍請諮詢專業意見。")));
   })()));
 }
 
@@ -2750,149 +2997,6 @@ function FortuneSection({
 }
 
 /* ---------------- 大運 section ---------------- */
-/* ---------------- 未來 5 年逐年運勢摘要（重用 buildPeriodFortune 引擎） ---------------- */
-function MultiYearForecastSection({
-  bazi
-}) {
-  const [openIdx, setOpenIdx] = useState(null);
-  const baseYear = new Date().getFullYear();
-  const years = [0, 1, 2, 3, 4].map(i => baseYear + i);
-  const nonOverall = CATEGORY_META.filter(c => c.key !== "overall");
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 18
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 700,
-      marginBottom: 4
-    }
-  }, "未來 5 年運勢摘要"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "#6B6252",
-      lineHeight: 1.7,
-      margin: "0 0 10px 2px"
-    }
-  }, "逐年列出每年干支對日主形成的十神關係，以及七大運勢面向的分數，幫助你快速掌握近期走勢；點選任一年可展開詳細解讀。若想看更完整的當年逐項分析，可切換到上方「流年」分頁。"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, years.map((y, i) => {
-    const yearStemIdx = ((y - 4) % 10 + 10) % 10;
-    const yearBranchIdx = ((y - 4) % 12 + 12) % 12;
-    const fortune = buildPeriodFortune(bazi, yearStemIdx, yearBranchIdx, "年");
-    const isOpen = openIdx === i;
-    const sorted = [...nonOverall].sort((a, b) => fortune.scores[b.key] - fortune.scores[a.key]);
-    const top = sorted[0];
-    const bottom = sorted[sorted.length - 1];
-    const hasSpread = fortune.scores[top.key] !== fortune.scores[bottom.key];
-    return /*#__PURE__*/React.createElement("div", {
-      key: y,
-      style: styles.fortuneCard
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => setOpenIdx(isOpen ? null : i),
-      style: styles.dayunHead
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        ...styles.dayunPillarBox,
-        borderColor: EL[STEM_ELEMENT[yearStemIdx]].color
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: EL[STEM_ELEMENT[yearStemIdx]].color
-      }
-    }, STEMS[yearStemIdx]), /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: EL[BRANCH_ELEMENT[yearBranchIdx]].color
-      }
-    }, BRANCHES[yearBranchIdx])), /*#__PURE__*/React.createElement("div", {
-      style: styles.fortuneTextCol
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        fontWeight: 600,
-        display: "flex",
-        alignItems: "center",
-        gap: 6
-      }
-    }, y, " 年", i === 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10,
-        color: "#b3492b",
-        border: "1px solid #E8CFC0",
-        borderRadius: 8,
-        padding: "1px 6px"
-      }
-    }, "今年")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#8A8272",
-        marginTop: 2
-      }
-    }, fortune.god, " · ", fortuneSimpleSummary("overall", fortune.scores.overall))), /*#__PURE__*/React.createElement("div", {
-      style: styles.fortuneScoreCol
-    }, /*#__PURE__*/React.createElement(StarScore, {
-      score: fortune.scores.overall
-    }), isOpen ? /*#__PURE__*/React.createElement(ChevronUp, {
-      size: 14,
-      color: "#8a8272"
-    }) : /*#__PURE__*/React.createElement(ChevronDown, {
-      size: 14,
-      color: "#8a8272"
-    }))), isOpen && /*#__PURE__*/React.createElement("div", {
-      style: styles.fortuneCardDetail
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 10,
-        marginBottom: 10
-      }
-    }, CATEGORY_META.map(c => /*#__PURE__*/React.createElement("div", {
-      key: c.key,
-      style: {
-        minWidth: 74
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#8A8272",
-        marginBottom: 2
-      }
-    }, c.label), /*#__PURE__*/React.createElement(StarScore, {
-      score: fortune.scores[c.key]
-    })))), /*#__PURE__*/React.createElement("p", {
-      style: {
-        margin: "0 0 8px",
-        lineHeight: 1.7
-      }
-    }, "這年與日主形成「", /*#__PURE__*/React.createElement("b", null, fortune.god), "」（", fortune.info.tag, "）：", fortune.info.desc), hasSpread && /*#__PURE__*/React.createElement("p", {
-      style: {
-        margin: "0 0 8px",
-        lineHeight: 1.7,
-        color: "#3F7A3D"
-      }
-    }, CATEGORY_GOD_NOTE[top.key][fortune.god]("年")), hasSpread && fortune.scores[bottom.key] <= 2 && /*#__PURE__*/React.createElement("p", {
-      style: {
-        margin: 0,
-        lineHeight: 1.7,
-        color: "#B14338"
-      }
-    }, CATEGORY_GOD_NOTE[bottom.key][fortune.god]("年"))));
-  })), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 10.5,
-      color: "#9C927C",
-      marginTop: 10,
-      lineHeight: 1.6,
-      padding: "0 2px"
-    }
-  }, "說明：年柱採簡化的固定曆年起算方式，實際交年以節氣「立春」為準，年初出生者的年柱歸屬可能略有差異；逐年分數僅反映年柱與日主的基礎關係，實際運勢仍會受當年流月、流日疊加影響，僅供中期趨勢參考。"));
-}
 
 function DayunSection({
   dayun,
