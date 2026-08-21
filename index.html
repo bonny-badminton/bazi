@@ -2121,7 +2121,9 @@ function BaziApp() {
     expanded: expanded,
     setExpanded: setExpanded,
     isWide: isWide
-  })), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(DayunSection, {
+  })), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(MultiYearForecastSection, {
+    bazi: bazi
+  }), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(DayunSection, {
     dayun: dayun,
     bazi: bazi,
     birthYear: active.birth.y,
@@ -2748,6 +2750,150 @@ function FortuneSection({
 }
 
 /* ---------------- 大運 section ---------------- */
+/* ---------------- 未來 5 年逐年運勢摘要（重用 buildPeriodFortune 引擎） ---------------- */
+function MultiYearForecastSection({
+  bazi
+}) {
+  const [openIdx, setOpenIdx] = useState(null);
+  const baseYear = new Date().getFullYear();
+  const years = [0, 1, 2, 3, 4].map(i => baseYear + i);
+  const nonOverall = CATEGORY_META.filter(c => c.key !== "overall");
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      marginBottom: 4
+    }
+  }, "未來 5 年運勢摘要"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#6B6252",
+      lineHeight: 1.7,
+      margin: "0 0 10px 2px"
+    }
+  }, "逐年列出每年干支對日主形成的十神關係，以及七大運勢面向的分數，幫助你快速掌握近期走勢；點選任一年可展開詳細解讀。若想看更完整的當年逐項分析，可切換到上方「流年」分頁。"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, years.map((y, i) => {
+    const yearStemIdx = ((y - 4) % 10 + 10) % 10;
+    const yearBranchIdx = ((y - 4) % 12 + 12) % 12;
+    const fortune = buildPeriodFortune(bazi, yearStemIdx, yearBranchIdx, "年");
+    const isOpen = openIdx === i;
+    const sorted = [...nonOverall].sort((a, b) => fortune.scores[b.key] - fortune.scores[a.key]);
+    const top = sorted[0];
+    const bottom = sorted[sorted.length - 1];
+    const hasSpread = fortune.scores[top.key] !== fortune.scores[bottom.key];
+    return /*#__PURE__*/React.createElement("div", {
+      key: y,
+      style: styles.fortuneCard
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setOpenIdx(isOpen ? null : i),
+      style: styles.dayunHead
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...styles.dayunPillarBox,
+        borderColor: EL[STEM_ELEMENT[yearStemIdx]].color
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: EL[STEM_ELEMENT[yearStemIdx]].color
+      }
+    }, STEMS[yearStemIdx]), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: EL[BRANCH_ELEMENT[yearBranchIdx]].color
+      }
+    }, BRANCHES[yearBranchIdx])), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneTextCol
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600,
+        display: "flex",
+        alignItems: "center",
+        gap: 6
+      }
+    }, y, " 年", i === 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#b3492b",
+        border: "1px solid #E8CFC0",
+        borderRadius: 8,
+        padding: "1px 6px"
+      }
+    }, "今年")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#8A8272",
+        marginTop: 2
+      }
+    }, fortune.god, " · ", fortuneSimpleSummary("overall", fortune.scores.overall))), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneScoreCol
+    }, /*#__PURE__*/React.createElement(StarScore, {
+      score: fortune.scores.overall
+    }), isOpen ? /*#__PURE__*/React.createElement(ChevronUp, {
+      size: 14,
+      color: "#8a8272"
+    }) : /*#__PURE__*/React.createElement(ChevronDown, {
+      size: 14,
+      color: "#8a8272"
+    }))), isOpen && /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneCardDetail
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 10
+      }
+    }, CATEGORY_META.map(c => /*#__PURE__*/React.createElement("div", {
+      key: c.key,
+      style: {
+        minWidth: 74
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#8A8272",
+        marginBottom: 2
+      }
+    }, c.label), /*#__PURE__*/React.createElement(StarScore, {
+      score: fortune.scores[c.key]
+    })))), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "這年與日主形成「", /*#__PURE__*/React.createElement("b", null, fortune.god), "」（", fortune.info.tag, "）：", fortune.info.desc), hasSpread && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: "#3F7A3D"
+      }
+    }, CATEGORY_GOD_NOTE[top.key][fortune.god]("年")), hasSpread && fortune.scores[bottom.key] <= 2 && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: 0,
+        lineHeight: 1.7,
+        color: "#B14338"
+      }
+    }, CATEGORY_GOD_NOTE[bottom.key][fortune.god]("年"))));
+  })), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "#9C927C",
+      marginTop: 10,
+      lineHeight: 1.6,
+      padding: "0 2px"
+    }
+  }, "說明：年柱採簡化的固定曆年起算方式，實際交年以節氣「立春」為準，年初出生者的年柱歸屬可能略有差異；逐年分數僅反映年柱與日主的基礎關係，實際運勢仍會受當年流月、流日疊加影響，僅供中期趨勢參考。"));
+}
+
 function DayunSection({
   dayun,
   bazi,
