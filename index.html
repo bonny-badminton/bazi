@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>八字命盤 ‧ 星座命盤</title>
+<title>萬象命盤 ‧ 命理占卜</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="八字命盤">
+<meta name="apple-mobile-web-app-title" content="萬象命盤">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#FBF8F2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1186,6 +1186,27 @@ function computeNatalTenGodProfile(bazi) {
   };
 }
 
+// 夫妻宮（日支）對日主而言的五行生剋關係，分類為五種：生我／同我／我生／我剋／剋我，
+// 用於感情婚姻分析中判斷配偶宮的性質。
+function dayBranchRelationCategory(bazi) {
+  const dmEl = STEM_ELEMENT[bazi.day.stemIdx];
+  const dbEl = BRANCH_ELEMENT[bazi.day.branchIdx];
+  if (dbEl === dmEl) return "同我";
+  if (GENERATES[dbEl] === dmEl) return "生我";
+  if (GENERATES[dmEl] === dbEl) return "我生";
+  if (OVERCOMES[dmEl] === dbEl) return "我剋";
+  if (OVERCOMES[dbEl] === dmEl) return "剋我";
+  return "同我";
+}
+
+// 命局是否帶有桃花結構：依年支或日支對應的三合局，檢查桃花位是否出現在命局四柱地支之中。
+function hasNatalPeach(bazi) {
+  const branches = [bazi.year.branchIdx, bazi.month.branchIdx, bazi.day.branchIdx, bazi.hour.branchIdx].filter(x => x !== undefined && x !== null);
+  const peachFromYear = peachBlossomBranch(bazi.year.branchIdx);
+  const peachFromDay = peachBlossomBranch(bazi.day.branchIdx);
+  return branches.includes(peachFromYear) || branches.includes(peachFromDay);
+}
+
 function tenGod(dayMasterIdx, otherStemIdx) {
   if (dayMasterIdx === otherStemIdx) return "比肩";
   const dmEl = STEM_ELEMENT[dayMasterIdx],
@@ -1335,6 +1356,263 @@ function analyzeWealthType(tenGodProfile) {
   };
 }
 
+// 感情與戀愛傾向：命盤中「財星」與「官殺」是傳統上用來描述感情能量的兩種脈絡——
+// 財星偏向資源／魅力導向，官殺偏向承諾／張力導向。這裡不預設使用者或對象的性別，
+// 純粹依命盤中這兩股能量何者較強來決定分析角度，適用於任何性別組合的關係。
+const WEALTH_BASED_ROMANCE_TEXT = {
+  正財為主: "你命局中「正財」的力量較為突出，這股能量在感情裡偏向務實與穩定：你容易被顧家、個性穩定可靠的對象吸引，也適合尋找同樣重視承諾與責任感的伴侶。戀愛時你的優勢是務實可靠、願意長期經營；問題可能是不夠浪漫、有時把感情處理得像在盡義務。感情穩定後建議多留意情感交流與生活情趣的經營，避免把關係過度「例行公事化」。",
+  偏財為主: "你命局中「偏財」的力量較為突出，這股能量在感情裡偏向機會與魅力：你桃花緣佳、容易吸引各種類型的對象，戀愛機會也相對多。戀愛時你的優勢是魅力十足、善於營造浪漫氣氛；問題可能是選擇太多反而難以定下心，或關係中容易有波動、第三者介入的風險。感情穩定後建議保持專一與透明溝通，避免因為機會太多而動搖對關係的承諾。",
+  正偏財皆旺: "你命局中正財、偏財力量都不弱，代表你桃花機會多、又同時渴望穩定的關係，戀愛時你能兼具浪漫與務實兩種特質。問題可能是感情選擇太多時反而猶豫不決。感情穩定後建議清楚劃分社交應酬與伴侶相處的界線，把心力明確放在對方身上。",
+  財星不顯: "你命局中財星（正財、偏財）力量較不明顯，代表感情不一定會「自動」找上你，需要更主動去經營與尋找。戀愛時你可能比較晚開竅，或需要對方主動一些你才會有反應；一旦投入感情，通常會相當專一。建議刻意撥出時間陪伴對方，不要讓其他事情把感情擠壓掉，主動維繫比被動等待更適合你。"
+};
+const AUTHORITY_BASED_ROMANCE_TEXT = {
+  正官為主: "你命局中「正官」的力量較為突出，這股能量在感情裡偏向承諾與規範：你容易被有責任感、行事有分寸的對象吸引，也適合尋找同樣重視承諾的伴侶。戀愛時你的優勢是重視承諾、願意認真經營長期關係；問題可能是對伴侶要求較高、有時顯得嚴肅拘謹。感情穩定後建議多留意情感表達與生活情趣，避免把關係經營得像在遵守規範。",
+  七殺為主: "你命局中「七殺」的力量較為突出，這股能量在感情裡偏向強烈與張力：你容易被強勢、有魄力、充滿張力的對象吸引，戀愛過程往往轟轟烈烈、感情濃烈。戀愛時你的優勢是敢愛敢恨、投入度高；問題可能是關係中張力較大，容易因為彼此都強勢而起衝突。感情穩定後建議多用溝通取代對抗，給彼此多一點退讓的空間，關係會更長久。",
+  正偏官皆旺: "你命局中正官、七殺力量都不弱，代表你同時渴望穩定的承諾與充滿張力的吸引力，戀愛時你能兼具責任感與魅力。問題可能是選擇太多時反而難以取捨、或在「安穩」與「心動」之間拉扯。感情穩定後建議想清楚自己真正看重的價值，把心力聚焦在真正合適的那個人身上。",
+  官殺不顯: "你命局中官殺（正官、七殺）力量較不明顯，代表感情不一定會「自動」找上你，需要更主動去經營與尋找，也可能對「進入一段關係」這件事比較沒有急迫感。戀愛時你通常需要時間慢慢培養感覺，一旦確定關係，也會相當專一穩定。建議主動安排相處的時間，別讓生活的忙碌把關係邊緣化。"
+};
+// 夫妻宮（日支）對日主的五行關係，補充說明伴侶在關係中的相對位置與互動模式（不涉及性別）
+const DAY_BRANCH_RELATION_TEXT = {
+  生我: "另外，你的夫妻宮（日支）對日主而言屬於「生我」的關係，代表伴侶容易扮演照顧、支持你的角色，你在關係中容易獲得安全感，但也要留意別把伴侶的付出視為理所當然。",
+  同我: "另外，你的夫妻宮（日支）對日主而言屬於「同我」的關係，代表你與伴侶容易像朋友一樣平等相處，溝通直接、很有話聊，但也要留意別把伴侶當成「戰友」而忽略了浪漫與親密感的經營。",
+  我生: "另外，你的夫妻宮（日支）對日主而言屬於「我生」的關係，代表你在感情中容易扮演付出、照顧對方的角色，對伴侶體貼用心，但也要留意別把自己的需求放到最後，感情需要雙向的給予才能長久。",
+  我剋: "另外，你的夫妻宮（日支）對日主而言屬於「我剋」的關係，代表你在感情中容易居於主導地位，對伴侶有較強的影響力，但也要留意別過度掌控或干涉對方的生活，給彼此保留一些自主空間。",
+  剋我: "另外，你的夫妻宮（日支）對日主而言屬於「剋我」的關係，代表伴侶在關係中容易展現較強的主導性或影響力，你可能會不自覺地順從對方，建議在關係中適度表達自己的想法，避免長期委屈自己。"
+};
+const PEACH_NATAL_NOTE = "你的命局中還帶有「桃花」的結構（依年支或日支對應的三合局判斷），代表你天生桃花緣或人際吸引力較佳，社交場合中容易成為焦點；感情機會多是優勢，但也要留意分辨這是「社交熱絡」還是「真正深刻的緣分」。";
+
+// 依命盤中「財星」與「官殺」兩者何者較強，決定感情分析採用哪一種脈絡；不依賴使用者或對象的性別，
+// 因此同一套分析同樣適用於任何性別組合的感情關係。
+function analyzeRelationshipType(tenGodProfile) {
+  const {
+    profile,
+    groups
+  } = tenGodProfile;
+  if (groups.財 >= groups.官殺) {
+    if (groups.財 < 0.3) return {
+      lens: "wealth",
+      key: "財星不顯"
+    };
+    if (profile.正財 >= profile.偏財 * 1.3) return {
+      lens: "wealth",
+      key: "正財為主"
+    };
+    if (profile.偏財 >= profile.正財 * 1.3) return {
+      lens: "wealth",
+      key: "偏財為主"
+    };
+    return {
+      lens: "wealth",
+      key: "正偏財皆旺"
+    };
+  }
+  if (groups.官殺 < 0.3) return {
+    lens: "authority",
+    key: "官殺不顯"
+  };
+  if (profile.正官 >= profile.七殺 * 1.3) return {
+    lens: "authority",
+    key: "正官為主"
+  };
+  if (profile.七殺 >= profile.正官 * 1.3) return {
+    lens: "authority",
+    key: "七殺為主"
+  };
+  return {
+    lens: "authority",
+    key: "正偏官皆旺"
+  };
+}
+
+// 人際與貴人：從「比劫（同輩／朋友）、印（長輩／貴人）、官殺（主管／權威）、食傷（表達／晚輩）」
+// 四個群組中，取力量最強者，描述朋友運、貴人運，以及與主管、同事、家人的互動模式。
+const SOCIAL_FIT_TEXT = {
+  比劫: "你命局中比肩、劫財的力量較強，代表朋友運旺盛，身邊不缺同輩夥伴，人生中你比較容易從「朋友、同輩」身上獲得幫助與支持；與同事的相處也偏向平等直接。跟主管互動時，你可能不太擅長「上對下」的服從模式，建議多展現對制度與職權的尊重，會讓職場關係更順。跟家人相處上，你重視彼此的獨立性，不喜歡被過度干涉。",
+  印: "你命局中正印、偏印的力量較強，代表貴人運旺盛，人生中你比較容易遇到長輩、老師、上司這類角色主動拉你一把、給你資源與指導。與主管、長輩的互動通常融洽，容易獲得信任與提攜；但也要留意別過度依賴他人的意見，適度培養自己獨立判斷的能力。跟家人相處上，你重視傳承與情感連結，容易成為家族中值得信賴的角色。",
+  官殺: "你命局中正官、七殺的力量較強，代表你人生中容易遇到規範、位階分明的人際結構，也比較容易受到權威人士（主管、長輩）的關注與要求。與主管的互動上，你懂得尊重制度與位階，容易獲得升遷機會，但也要留意別把工作壓力帶入私人關係。跟家人相處上，你重視責任與家庭倫理，容易成為家中承擔較多責任的角色。",
+  食傷: "你命局中食神、傷官的力量較強，代表你在人際互動中很重視自我表達與被理解，朋友運與人際魅力都不錯，容易透過才華或幽默感拉近與人的距離。與主管的互動上，你可能不太喜歡被過度管束，建議把想法用更委婉的方式表達，會減少不必要的摩擦。跟晚輩、下屬相處你則相當有耐心，也樂於分享與指導。"
+};
+// 判斷人際與貴人分析中最主導的群組（僅比較比劫／印／官殺／食傷四者，財星不直接對應人際角色故不參與比較）
+function analyzeSocialType(tenGodProfile) {
+  const {
+    groups
+  } = tenGodProfile;
+  const candidates = ["比劫", "印", "官殺", "食傷"];
+  candidates.sort((a, b) => groups[b] - groups[a]);
+  return candidates[0];
+}
+
+/* ============================================================
+   命盤總結卡：5 大優勢／5 個要注意／3 件值得把握的事
+   整合前面各模組（日主性格、整張命盤十神分布、財運分類、人際貴人）的分析結果，
+   採用短句條列的方式呈現，方便快速掃讀重點；每一條都附上依據來源，而非套用空泛通用的描述。
+   ============================================================ */
+// 依日主天干的簡短優勢／注意事項條列（不同於 PERSONALITY 的完整段落，這裡是精簡摘要用）
+const DAY_MASTER_STRENGTHS = {
+  甲: "行動力強、有主見，一旦設定目標就會積極往前推進",
+  乙: "應變力強、人緣佳，懂得順勢而為、化解僵局",
+  丙: "熱情有感染力，擅長帶動氣氛、鼓舞身邊的人",
+  丁: "心思細膩、直覺敏銳，擅長察覺他人未說出口的需要",
+  戊: "穩重踏實、值得信賴，答應的事情會盡力做到",
+  己: "細心體貼、包容力強，擅長照顧與協調身邊的人",
+  庚: "意志堅定、行事果決，遇到挑戰不輕易退縮",
+  辛: "審美細緻、要求精準，做事講求品質與細節",
+  壬: "聰明靈活、格局開闊，善於應對多變的局面",
+  癸: "心思縝密、洞察力強，善於體察環境與人心的細微變化"
+};
+const DAY_MASTER_WATCHOUTS = {
+  甲: "個性較固執，遇到不同意見時容易堅持己見、不易妥協",
+  乙: "意志力容易搖擺，遇壓力時容易依賴他人做決定",
+  丙: "情緒來得快去得也快，做事有時缺乏持續的耐心",
+  丁: "容易多愁善感、想太多，長期下來容易自我內耗",
+  戊: "反應較慢、不擅表達內心想法，容易顯得固執保守",
+  己: "過於在意他人感受，容易委屈自己、不擅拒絕",
+  庚: "個性較剛硬直接，言辭有時過於銳利，容易得罪人",
+  辛: "自尊心強、較敏感，容易因小事耿耿於懷",
+  壬: "有時三心二意、缺乏定性，容易半途而廢",
+  癸: "情緒容易內縮壓抑，遇到壓力時傾向獨自承受、不輕易求助"
+};
+// 依「整張命盤」中最強十神的簡短優勢／注意事項條列
+const TEN_GOD_STRENGTHS = {
+  比肩: "自主性強、重視公平，做自己的事很有原則",
+  劫財: "行動力足、敢於競爭，遇到機會會積極把握",
+  食神: "才華洋溢、親和力佳，容易把生活過得有滋有味",
+  傷官: "聰明機敏、表達力強，能清楚說出自己的想法",
+  偏財: "商業嗅覺敏銳、人脈廣，擅長把握意外的機會",
+  正財: "務實可靠、腳踏實地，擅長長期累積成果",
+  七殺: "抗壓性強、決斷力夠，關鍵時刻能扛起責任",
+  正官: "重視制度與責任感，做事有分寸、值得信賴",
+  偏印: "思維獨到、善於鑽研，容易在專業領域走出自己的路",
+  正印: "學習力強、貴人運佳，容易獲得他人的信任與支持"
+};
+const TEN_GOD_WATCHOUTS = {
+  比肩: "不擅長被他人管束，過度堅持己見時容易與人起衝突",
+  劫財: "財務上較易衝動，需留意合夥與借貸的風險",
+  食神: "有時過於安逸、缺乏危機意識，容易錯過該衝刺的時機",
+  傷官: "言辭直接容易傷人，需留意與權威人士的溝通方式",
+  偏財: "收入來源多元但也容易分散心力，需留意資源整合",
+  正財: "有時過於保守，面對變化較慢熱、不易嘗試新事物",
+  七殺: "行事風格較強硬，需留意別讓身邊的人感到壓力",
+  正官: "有時過於在意他人眼光與規範，容易綁手綁腳",
+  偏印: "較不擅社交、偏好獨處，需留意別把自己過度孤立",
+  正印: "有時依賴心較重，遇到問題習慣等待他人伸出援手"
+};
+// 依財運分類的優勢條列
+const WEALTH_STRENGTH_BULLET = {
+  正財為主: "財運穩紮穩打，擅長靠時間與紀律累積財富",
+  偏財為主: "商業機會敏銳度高，容易透過人脈與機會創造額外收入",
+  正偏財皆旺: "同時具備穩定收入與機會財的雙重優勢",
+  財星不顯: "財富雖不主動上門，但專注本業與能力提升就能穩定帶動財運"
+};
+// 依人際貴人分類的優勢條列
+const SOCIAL_STRENGTH_BULLET = {
+  比劫: "朋友運旺，人生路上不缺同輩夥伴相挺",
+  印: "貴人運旺，容易遇到長輩、老師願意提攜與指導",
+  官殺: "容易獲得權威人士的關注，升遷提攜的機會較多",
+  食傷: "人際魅力佳，容易用才華或幽默感拉近與人的距離"
+};
+// 依命局判定的忌神（不利五行），描述容易失衡的傾向
+const UNFAVORABLE_ELEMENT_WATCHOUT = {
+  木: "命局忌神偏向「木」，行事衝過頭時容易顯得急躁、缺乏耐心",
+  火: "命局忌神偏向「火」，情緒起伏較大時容易衝動行事、事後後悔",
+  土: "命局忌神偏向「土」，過度求穩時容易顯得猶豫、錯失時機",
+  金: "命局忌神偏向「金」，過於嚴苛時容易對自己或他人太過苛求",
+  水: "命局忌神偏向「水」，想太多時容易鑽牛角尖、難以下決定"
+};
+// 依「整張命盤」中最弱的十神群組，描述該群組偏弱時容易出現的傾向
+const WEAK_GROUP_WATCHOUT = {
+  比劫: "命局中比肩劫財力量偏弱，獨立自主的信心有時不足，遇到壓力容易過度依賴他人意見",
+  食傷: "命局中食神傷官力量偏弱，表達與展現自我的動力較不足，好的想法有時不容易被人看見",
+  財: "命局中財星力量偏弱，對金錢的敏感度較不足，理財規劃上可以多花一些心思",
+  官殺: "命局中官殺力量偏弱，自我要求與時間紀律容易鬆散，設定明確的目標與截止期限會有幫助",
+  印: "命局中印星力量偏弱，遇到困難時較少主動求助或參考他人經驗，凡事容易靠自己硬撐"
+};
+// 「未來最值得把握的事」——依整張命盤十神中最強的一個，給出具體可行動的建議
+const OPPORTUNITY_CAREER = {
+  比肩: "可以主動發起一個需要團隊協作的專案，你的組織與號召力會是關鍵優勢。",
+  劫財: "適合放手一搏爭取一次業務或銷售型的挑戰，你的行動力這時特別容易看到成果。",
+  食神: "把你擅長的興趣或才藝往外分享（教學、創作、內容產出），會是很好的發展方向。",
+  傷官: "可以試著把自己的想法或作品公開發表，這段時間你的表現特別容易被看見。",
+  偏財: "多參加社交或商業場合，敞開來接觸新機會，人脈很可能在近期為你帶來意外收穫。",
+  正財: "適合啟動一項需要長期投入的計畫或資產累積，現在踏出第一步會很值得。",
+  七殺: "遇到需要當機立斷的挑戰時不妨勇敢接下來，你的抗壓性這段時間特別能發揮。",
+  正官: "適合主動爭取升遷、認證或更有制度的角色，你的責任感容易被上位者看見。",
+  偏印: "可以深入鑽研一項專業或興趣，往「成為某個領域的專家」的方向前進。",
+  正印: "適合安排進修、考取證照，或主動請益你信任的前輩，這是累積實力的好時機。"
+};
+const OPPORTUNITY_WEALTH = {
+  正財為主: "把握本業內可以長期經營、逐步升遷的機會，穩紮穩打會是你最快看到成果的路徑。",
+  偏財為主: "多留意身邊出現的合作、投資、副業機會，你的商業嗅覺在近期特別容易派上用場。",
+  正偏財皆旺: "同時經營穩定本業與機會型副業，兩者搭配會讓你的財務基礎更扎實。",
+  財星不顯: "把心力放在專業能力與職位的提升上，財富會隨著能力自然跟上來。"
+};
+
+// 整合建立命盤總結卡的資料：5 大優勢、5 個要注意的地方、3 件未來值得把握的事
+function buildChartSummary(bazi, strength, tgProfile, wealthInfo, socialType) {
+  const dm = STEMS[bazi.day.stemIdx];
+  const {
+    topGod,
+    secondGod,
+    groups
+  } = tgProfile;
+  const weakestGroup = [...Object.keys(groups)].sort((a, b) => groups[a] - groups[b])[0];
+  const firstUnfavorable = strength.unfavorable && strength.unfavorable[0];
+  const firstFavorable = strength.favorable && strength.favorable[0];
+  const strengths = [{
+    text: DAY_MASTER_STRENGTHS[dm],
+    from: `依日主「${dm}」的性格特質`
+  }, {
+    text: TEN_GOD_STRENGTHS[topGod],
+    from: `依整張命盤中力量最強的十神「${topGod}」`
+  }, {
+    text: TEN_GOD_STRENGTHS[secondGod],
+    from: `依命盤中力量次強的十神「${secondGod}」`
+  }, {
+    text: WEALTH_STRENGTH_BULLET[wealthInfo.typeKey],
+    from: `依財運分類「${wealthInfo.typeKey}」`
+  }, {
+    text: SOCIAL_STRENGTH_BULLET[socialType],
+    from: `依人際貴人分類中最強的群組「${socialType}」`
+  }];
+  const watchouts = [{
+    text: DAY_MASTER_WATCHOUTS[dm],
+    from: `依日主「${dm}」的性格特質`
+  }, {
+    text: TEN_GOD_WATCHOUTS[topGod],
+    from: `依整張命盤中力量最強的十神「${topGod}」`
+  }, firstUnfavorable ? {
+    text: UNFAVORABLE_ELEMENT_WATCHOUT[firstUnfavorable],
+    from: `依命局判定的忌神「${firstUnfavorable}」`
+  } : {
+    text: TEN_GOD_WATCHOUTS[secondGod],
+    from: `依命盤中力量次強的十神「${secondGod}」`
+  }, wealthInfo.leakWarning ? {
+    text: "命局中比肩劫財明顯強過財星，容易有破財或合夥拆帳不清的風險，理財上要格外謹慎",
+    from: "依財運分類中的「財弱比劫旺」提醒"
+  } : {
+    text: TEN_GOD_WATCHOUTS[secondGod],
+    from: `依命盤中力量次強的十神「${secondGod}」`
+  }, {
+    text: WEAK_GROUP_WATCHOUT[weakestGroup],
+    from: `依整張命盤中力量最弱的十神群組「${weakestGroup}」`
+  }];
+  const opportunities = [{
+    text: firstFavorable ? `持續強化「${firstFavorable}」相關的五行能量（可參考上方的五行生活建議），是近期最容易借力使力、放大優勢的方向。` : "留意大運流年補進喜用神的時間點，那會是運勢相對明顯轉強的階段。",
+    from: `依命局判定的喜用神「${firstFavorable || "（依當前大運流年）"}」`
+  }, {
+    text: OPPORTUNITY_WEALTH[wealthInfo.typeKey],
+    from: `依財運分類「${wealthInfo.typeKey}」`
+  }, {
+    text: OPPORTUNITY_CAREER[topGod],
+    from: `依整張命盤中力量最強的十神「${topGod}」`
+  }];
+  return {
+    strengths,
+    watchouts,
+    opportunities
+  };
+}
+
 // 性格特質：依日主天干
 const PERSONALITY = {
   甲: "你的日主是甲木，個性正直、積極向上，像大樹一樣有主見、重原則，天生具有領導欲望與開創精神。優點是行動力強、責任感重，做事有計畫；缺點是有時較固執、不擅妥協，容易因堅持己見而與人起衝突。建議在人際互動中多留一點彈性，成長空間會更寬廣。",
@@ -1392,7 +1670,7 @@ const CATEGORY_DEEPDIVE = {
   overall: "整體運勢的判斷，是綜合當日／當年干支對你日主形成的十神關係、該五行在你整體命局（四柱八字）中是喜用還是忌神，再加上與年、月、日、時四柱地支的沖合關係總和來評估。當補進的五行剛好是你命局判定的喜用神，通常代表運勢有加分效果；反之若落在忌神方向、又與多個柱位相沖，則容易諸事不順，宜適度節制、以靜制動。",
   wealth: "財運主要看「財星」——也就是日主所剋的五行。正財代表穩定務實的收入與理財成果，偏財則偏向意外之財、投資或業外收穫，並會參考這股五行氣是否為你命局整體判定的喜用神。若當日／當年出現比肩、劫財這類與日主同氣的十神，或與年柱、月柱形成相沖，則容易有破財、外借或衝動花費的傾向，理財上宜更謹慎。",
   career: "工作運主要參考「官殺」（剋制日主的五行，代表規範與責任）與「食傷」（日主所生的五行，代表才華與表現），並特別留意當日／當年地支與你命局「月柱」（傳統上代表事業與父母宮）的沖合關係——相合利於推進計畫、獲得支持，相沖則容易遇到變動或阻力。正官、正印出現時利於升遷、簽約與貴人提攜；食神、傷官則利於發揮創意與專業表現，但傷官過旺時也容易因言語鋒芒而生是非。",
-  romance: "桃花運的判斷結合三個層面：一是命理上的「桃花星」（依你日支或年支對應的三合局計算，子午卯酉四支為桃花位），二是財星、官星這類代表異性緣與吸引力的十神，三是當日／當年地支與你命局「日柱」（代表自身與夫妻宮）的沖合關係——相合利於感情和諧，相沖則情緒與關係較易有起伏。桃花出現時，你在人際互動中會更容易被留意到，但也要留意是否只是社交熱絡、而非真正深刻的緣分。",
+  romance: "桃花運的判斷結合三個層面：一是命理上的「桃花星」（依你日支或年支對應的三合局計算，子午卯酉四支為桃花位），二是財星、官星這類代表桃花緣與吸引力的十神，三是當日／當年地支與你命局「日柱」（代表自身與夫妻宮）的沖合關係——相合利於感情和諧，相沖則情緒與關係較易有起伏。桃花出現時，你在人際互動中會更容易被留意到，但也要留意是否只是社交熱絡、而非真正深刻的緣分。",
   social: "人際關係主要看比肩（同輩、朋友）與食神、正印（表達與貴人）這類十神是否活躍，同時特別參考當日／當年地支與你命局「年柱」（傳統上代表根基與社交宮）的沖合關係——相合利於拓展人脈、獲得長輩助力，相沖則容易因誤會或立場不同而起摩擦，凡事多一分耐心會化解不少衝突。",
   health: "健康運會參考你整體命局中五行是否失衡：五行缺乏或過旺的部位，往往是體質上需要長期留意的環節（如木對應肝膽筋骨、火對應心血管、土對應脾胃、金對應肺部呼吸、水對應腎臟泌尿），並綜合當日／當年地支與命局四柱（年、月、日、時）整體沖合的淨值來判斷氣血是否平穩。沖多合少時精神體力較易耗損，宜多休息；合多沖少則有助身心調和。",
   study: "學業與貴人運主要看「印星」（生日主的五行，代表長輩、文書、學習資源）與「正官」（代表規範與考核）是否活躍，並參考當日／當年地支與你命局「月柱」的沖合關係——相合時進修、考證、簽約較順，也容易遇到願意指導你的貴人；相沖則容易與師長或體制產生摩擦，需要多一點耐心與溝通。也會一併考量這股五行氣是否為你整體命局判定的喜用神。"
@@ -1658,7 +1936,7 @@ const CATEGORY_GOD_NOTE = {
     劫財: unit => `這${unit}感情中容易有競爭或第三者介入的意味，互動宜坦誠溝通、避免猜忌，才能減少不必要的誤會。`,
     食神: unit => `這${unit}氣氛輕鬆愉快，適合安排約會、共進美食，感情自然升溫，是拉近距離的好時機。`,
     傷官: unit => `這${unit}情緒表達較直接，容易因言語衝突影響感情，建議溝通時多一分包容、少一分批評。`,
-    偏財: unit => `這${unit}異性緣旺盛，社交場合容易吸引目光，但也要分辨清楚是曖昧氛圍還是真心，避免會錯意。`,
+    偏財: unit => `這${unit}桃花緣旺盛，社交場合容易吸引目光，但也要分辨清楚是曖昧氛圍還是真心，避免會錯意。`,
     正財: unit => `這${unit}感情走向穩定務實，適合討論未來規劃或進一步的關係承諾，是深化感情的好時機。`,
     七殺: unit => `這${unit}感情張力較大，容易有強烈吸引力卻也伴隨壓力或摩擦，建議多溝通、避免用強硬態度處理分歧。`,
     正官: unit => `這${unit}適合正式交往、論及婚嫁，是感情走向穩定承諾的象徵，單身者也有機會遇到條件不錯的對象。`,
@@ -2206,34 +2484,7 @@ function BaziApp() {
       ...styles.brandTitle,
       fontSize: isWide ? 26 : 22
     }
-  }, "八字命盤")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: forceRefreshApp,
-    title: "重新整理，取得最新版本",
-    style: {
-      ...styles.addBtn,
-      background: "#fff",
-      color: "#8A8272",
-      border: "1px solid #E7E0D2",
-      paddingLeft: 10,
-      paddingRight: 10
-    }
-  }, /*#__PURE__*/React.createElement(RefreshCw, {
-    size: 15,
-    style: refreshing ? {
-      animation: "spin 1s linear infinite"
-    } : undefined
-  })), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShowForm(true),
-    style: styles.addBtn
-  }, /*#__PURE__*/React.createElement(Plus, {
-    size: 16
-  }), " 新增"))), profiles.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "萬象命盤"))), profiles.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: styles.profileRow
   }, profiles.map(p => /*#__PURE__*/React.createElement("button", {
     key: p.id,
@@ -2388,7 +2639,21 @@ function BaziApp() {
     onCancel: () => setShowForm(false),
     onSave: addProfile,
     isWide: isWide
-  }));
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: forceRefreshApp,
+    title: "重新整理，取得最新版本",
+    style: styles.refreshFab
+  }, /*#__PURE__*/React.createElement(RefreshCw, {
+    size: 18,
+    style: refreshing ? {
+      animation: "spin 1s linear infinite"
+    } : undefined
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowForm(true),
+    style: styles.addFab
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 18
+  }), "新增"));
 }
 
 /* ---------------- Empty state ---------------- */
@@ -2715,6 +2980,121 @@ function BaziCard({
         color: "#A79C86"
       }
     }, "財運分類屬於傳統命理的日常參考與自我探索工具，不構成投資理財建議，實際財務決策仍請諮詢專業意見。")));
+  })(), (() => {
+    const tgProfile = computeNatalTenGodProfile(bazi);
+    const rel = analyzeRelationshipType(tgProfile);
+    const relText = rel.lens === "wealth" ? WEALTH_BASED_ROMANCE_TEXT[rel.key] : AUTHORITY_BASED_ROMANCE_TEXT[rel.key];
+    const dayBranchRel = dayBranchRelationCategory(bazi);
+    const natalPeach = hasNatalPeach(bazi);
+    const socialType = analyzeSocialType(tgProfile);
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlock
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlockTitle
+    }, "感情與婚姻"), /*#__PURE__*/React.createElement("p", {
+      style: styles.subBlockText
+    }, relText), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        color: "#A79C86"
+      }
+    }, DAY_BRANCH_RELATION_TEXT[dayBranchRel]), natalPeach && /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        color: "#A79C86"
+      }
+    }, PEACH_NATAL_NOTE), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "此分析採用傳統命理「配偶星」的方法（依你設定的性別對應正財／正官），主要反映的是關係中的互動模式與相處傾向，桃花與感情吸引力本身並不限於特定性別或性向；感情婚姻分析屬於傳統命理的日常參考與自我探索工具，實際感情與婚姻仍取決於雙方相處與經營，命盤不能決定關係的成敗。")), /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlock
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlockTitle
+    }, "人際與貴人"), /*#__PURE__*/React.createElement("p", {
+      style: styles.subBlockText
+    }, SOCIAL_FIT_TEXT[socialType]), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 8,
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "此分析同樣採用整張命盤十神分布估算，反映人際互動的傾向，實際人際關係仍會受個人經驗與後天努力影響。")));
+  })(), (() => {
+    const tgProfile = computeNatalTenGodProfile(bazi);
+    const wealthInfo = analyzeWealthType(tgProfile);
+    const socialType = analyzeSocialType(tgProfile);
+    const summary = buildChartSummary(bazi, strength, tgProfile, wealthInfo, socialType);
+    const bulletGroup = (items, color) => /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 9
+      }
+    }, items.map((it, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        fontSize: 12.5,
+        lineHeight: 1.6,
+        color: "#4A4438"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: color,
+        fontWeight: 700
+      }
+    }, i + 1, ". "), it.text, /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: "block",
+        fontSize: 10.5,
+        color: "#A79C86",
+        marginTop: 2
+      }
+    }, it.from))));
+    return /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlock
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.subBlockTitle
+    }, "命盤總結：優勢、盲點與機會"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginBottom: 12
+      }
+    }, "綜合以上各項分析，整理成最精簡的重點摘要，方便你快速掌握自己命盤的關鍵特質；每一條後方都附上依據來源，而不是套用空泛通用的描述。"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#3F7A3D",
+        margin: "0 0 8px"
+      }
+    }, "★ 5 個最大優勢"), bulletGroup(summary.strengths, "#3F7A3D"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#B14338",
+        margin: "16px 0 8px"
+      }
+    }, "▲ 5 個需要注意的地方"), bulletGroup(summary.watchouts, "#B14338"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#b3492b",
+        margin: "16px 0 8px"
+      }
+    }, "✦ 3 件未來值得把握的事"), bulletGroup(summary.opportunities, "#b3492b"), /*#__PURE__*/React.createElement("p", {
+      style: {
+        ...styles.subBlockText,
+        marginTop: 14,
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "此總結為前面各項分析的精簡整理，屬於自我覺察與探索的參考工具，命盤不能決定人生的必然結果，實際發展仍取決於你的選擇與努力。"));
   })()));
 }
 
@@ -4118,7 +4498,7 @@ const styles = {
     background: "#FBF8F2",
     color: "#2B2620",
     fontFamily: '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif',
-    padding: "16px 14px 40px",
+    padding: "16px 14px 130px",
     maxWidth: 480,
     margin: "0 auto"
   },
@@ -4152,6 +4532,39 @@ const styles = {
     padding: "8px 12px",
     fontSize: 13,
     fontWeight: 600
+  },
+  refreshFab: {
+    position: "fixed",
+    right: 18,
+    bottom: "calc(78px + env(safe-area-inset-bottom))",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    background: "#fff",
+    color: "#8A8272",
+    border: "1px solid #E7E0D2",
+    boxShadow: "0 6px 16px rgba(43,38,32,0.16)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 50
+  },
+  addFab: {
+    position: "fixed",
+    right: 18,
+    bottom: "calc(18px + env(safe-area-inset-bottom))",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    background: "#b3492b",
+    color: "#fff",
+    border: "none",
+    borderRadius: 26,
+    padding: "13px 20px",
+    fontSize: 14,
+    fontWeight: 700,
+    boxShadow: "0 8px 20px rgba(179,73,43,0.38)",
+    zIndex: 51
   },
   profileRow: {
     display: "flex",
