@@ -2514,10 +2514,10 @@ function BaziApp() {
     style: styles.systemBar
   }, [{
     key: "bazi",
-    label: "八字命理"
+    label: "八字"
   }, {
     key: "astro",
-    label: "星座命盤"
+    label: "星座"
   }].map(s => /*#__PURE__*/React.createElement("button", {
     key: s.key,
     onClick: () => {
@@ -2586,7 +2586,7 @@ function BaziApp() {
       color: "#8A8272",
       lineHeight: 1.7
     }
-  }, "星座命盤功能需要載入天文計算函式庫，在這個預覽環境中尚未啟用。請在已部署的獨立版網站中使用這個分頁；八字命理分頁則完全不受影響，可以正常使用。")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(AstroCard, {
+  }, "星座功能需要載入天文計算函式庫，在這個預覽環境中尚未啟用。請在已部署的獨立版網站中使用這個分頁；八字分頁則完全不受影響，可以正常使用。")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(AstroCard, {
     profile: active,
     natal: natal,
     isWide: isWide,
@@ -2677,12 +2677,12 @@ function EmptyState({
       marginBottom: 20,
       lineHeight: 1.6
     }
-  }, "輸入你的出生日期，排出專屬八字，", /*#__PURE__*/React.createElement("br", null), "查看每日流年運勢與宜忌。"), /*#__PURE__*/React.createElement("button", {
+  }, "輸入你的出生日期，排出專屬命盤，", /*#__PURE__*/React.createElement("br", null), "同時解讀八字與星座，查看每日流年運勢與宜忌。"), /*#__PURE__*/React.createElement("button", {
     onClick: onAdd,
     style: styles.primaryBtn
   }, /*#__PURE__*/React.createElement(Plus, {
     size: 16
-  }), " 建立我的八字"));
+  }), " 建立我的命盤"));
 }
 
 /* ---------------- BaZi tablet card ---------------- */
@@ -2833,7 +2833,7 @@ function BaziCard({
   }, STEMS[bazi.day.stemIdx], STEM_ELEMENT[bazi.day.stemIdx]), "，以下運勢皆以日主為核心推算。"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowMore(v => !v),
     style: styles.moreToggle
-  }, showMore ? "收起性格與用神分析" : "查看性格特質與用神喜忌", showMore ? /*#__PURE__*/React.createElement(ChevronUp, {
+  }, showMore ? "收起命盤深度解讀" : "查看命盤深度解讀", showMore ? /*#__PURE__*/React.createElement(ChevronUp, {
     size: 13
   }) : /*#__PURE__*/React.createElement(ChevronDown, {
     size: 13
