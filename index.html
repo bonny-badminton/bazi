@@ -873,6 +873,288 @@ function astroElementCounts(natal) {
   return counts;
 }
 
+/* ============================================================
+   星座命盤深度解讀：比照八字「命盤深度解讀」的架構與深度，
+   依太陽（核心個性）、月亮（情緒需求）、上升（外在形象）、火星（工作事業）、
+   金星（財運與感情）、木星（機會與貴人）等本命行星落座的星座，提供長期性格傾向分析，
+   並整合四大元素（火土風水）分布解讀，最後統整成 5 大優勢／5 個注意／3 件值得把握的事。
+   與逐日／逐年的行運分析（astroDynamicNote 等）性質不同，這裡是「命盤本身」的靜態解讀。
+   ============================================================ */
+// 太陽星座：核心個性
+const SUN_TRAITS = ["你充滿行動力與開創精神，喜歡站在第一線衝刺，個性直接坦率，遇到目標會毫不猶豫地往前衝，但也要留意耐心與持續力的培養。", "你務實穩重、重視安全感與物質基礎，做事按部就班、值得信賴，但也容易因為太固執而錯過需要彈性應變的機會。", "你聰明機靈、好奇心旺盛，擅長蒐集資訊與多工處理，思路靈活多變，但也要留意注意力容易分散、難以深耕單一領域。", "你重視情感連結與歸屬感，體貼細膩、很會照顧身邊的人，家庭與親密關係對你來說格外重要，但也容易因為過度敏感而受傷。", "你自信大方、渴望被看見，天生具有領袖魅力與舞台魅力，樂於慷慨付出，但也要留意別讓自尊心影響了聽取建議的空間。", "你細心負責、追求效率與完美，擅長分析與解決問題，做事有條理，但也容易因為過度挑剔而增加自己與他人的壓力。", "你重視和諧與美感，善於社交協調、擅長換位思考，是天生的橋樑角色，但也容易因為想討好所有人而難以做出決定。", "你情感深刻、洞察力敏銳，一旦投入就全心全意，個性神秘而有魅力，但也要留意占有欲與猜疑心，適度給彼此空間。", "你樂觀開朗、熱愛自由與冒險，對世界充滿好奇心，喜歡追求更廣闊的視野，但也容易因為承諾恐懼而顯得不夠踏實。", "你務實負責、目標導向，天生具備紀律與耐心，願意為長遠目標付出努力，但也要留意別把工作看得比生活與情感更重要。", "你獨立創新、思想前衛，重視自由與人道關懷，總能提出與眾不同的觀點，但也容易顯得疏離、不擅長表達私人情感。", "你感性直覺、富同理心，想像力豐富、藝術天分佳，很容易感同身受他人的情緒，但也要留意別在自我犧牲中迷失自己。"];
+// 月亮星座：情緒與內在需求
+const MOON_TRAITS = ["你的情緒來得快去得也快，需要立即行動來釋放內在的衝動與焦躁，獨立自主是你安全感的重要來源。", "你需要穩定與物質上的安全感才能感到安心，喜歡熟悉舒適的環境與規律的生活步調，情緒穩定但變動時容易緊張。", "你需要透過交流與資訊刺激來安撫內心，情緒表現理性、擅長用言語化解感受，但也容易因想太多而心神不寧。", "你的情緒與家庭、歸屬感緊密相連，需要溫暖的情感連結才有安全感，天生具有照顧他人的直覺與同理心。", "你需要被肯定、被看見才會感到滿足，情緒表達戲劇化而真誠，喜歡在關係中扮演被依靠與崇拜的角色。", "你透過整理與解決問題來安撫情緒，需要秩序感與被需要的價值感，容易因為擔心犯錯而過度自我要求。", "你需要和諧的人際關係與美好的環境才能感到平靜，情緒容易受周遭氣氛影響，不喜歡衝突與緊張的氛圍。", "你的情緒強烈而深沉，需要真實深刻的情感連結，不輕易表露內心，一旦信任就會全心投入。", "你需要自由與新鮮感來維持內在活力，情緒表現樂觀直率，長期被綁住的感受容易讓你感到窒息。", "你習慣用理性與自制來處理情緒，需要透過成就與被尊重來獲得安全感，不擅長示弱但內心其實渴望被理解。", "你需要個人空間與思想上的自由才能感到自在，情緒表現理性疏離，喜歡透過群體或理念找到歸屬感。", "你的情緒細膩敏感、容易被周遭氣氛感染，需要透過想像、藝術或靈性活動來安放內在感受，也要留意別過度吸收他人的情緒。"];
+// 上升星座：外在形象與初次印象
+const ASC_TRAITS = ["給人的第一印象是充滿活力、直接坦率，行動速度快、不拖泥帶水。", "給人的第一印象是沉穩可靠、氣質溫和，散發著讓人安心的踏實感。", "給人的第一印象是機智風趣、反應靈敏，很容易打開話題、拉近距離。", "給人的第一印象是溫柔親切、有些含蓄，容易讓人感到被照顧與被理解。", "給人的第一印象是自信大方、氣場十足，天生就容易成為場合中的焦點。", "給人的第一印象是整潔幹練、態度謹慎，讓人覺得專業又值得信賴。", "給人的第一印象是優雅得體、親和力強，天生擅長社交場合的應對進退。", "給人的第一印象是神秘深邃、氣場強烈，讓人忍不住想進一步了解你。", "給人的第一印象是開朗直爽、充滿活力，散發著自由不羈的氣息。", "給人的第一印象是成熟穩重、有距離感，讓人覺得可靠但需要時間熟悉。", "給人的第一印象是獨特有個性、思想前衛，讓人感覺你總是與眾不同。", "給人的第一印象是溫柔夢幻、帶點迷糊感，容易讓人卸下心防、想要親近你。"];
+// 火星星座：工作事業適配
+const MARS_CAREER = ["你的行動力強、敢於競爭，適合步調快速、需要當機立斷的工作，例如業務開發、新創或需要衝鋒陷陣的角色；比起制式的上班族生涯，你更適合能主導方向的位置，創業或當主管都能發揮你的開創力，但要留意別因躁進而忽略細節。", "你做事踏實穩健、不喜歡朝令夕改，適合需要長期經營與累積成果的領域，例如財務、餐飲、藝術或不動產；你在穩定的職務或大型組織裡容易發揮優勢，創業的話也適合走穩紮穩打的路線，而非快速擴張。", "你思路靈活、擅長多工處理，適合需要溝通協調、資訊流動快的領域，例如媒體、行銷、業務、教學；比起單一固定的職務，你更適合能同時處理多項任務、有變化性的工作型態，接案或身兼多職都很適合你。", "你重視團隊的情感連結，適合需要照顧他人、建立信任感的領域，例如餐飲、教育、醫療照護、人資；你在有歸屬感的團隊裡最容易發揮，當主管時你會是照顧型的領導者，善於凝聚團隊的向心力。", "你天生具有舞台魅力與領導欲望，適合需要站在第一線、展現自我的領域，例如表演、行銷、業務、創業；你很適合當主管或自己當老闆，能激勵團隊士氣，但要留意適度傾聽不同的意見。", "你細心負責、追求效率與精準，適合需要分析、把關品質的領域，例如財會、品管、醫療、行政管理；你在需要細節與專業度的職務裡容易被信賴，適合擔任幕僚或專業顧問的角色，穩紮穩打地累積口碑。", "你善於協調與談判，適合需要人際互動、追求平衡的領域，例如公關、法律、設計、諮詢顧問；你適合與人合作的工作型態，比起單打獨鬥，你在夥伴關係或團隊合作中更容易發光發熱。", "你意志堅定、洞察力強，適合需要深入鑽研、處理複雜局面的領域，例如研究、心理諮商、財務投資、危機處理；你適合能發揮專注力與決斷力的專業職務，一旦投入就會全力以赴，追求極致的成果。", "你熱愛自由與探索，適合需要跨界、國際化或不斷學習的領域，例如教育、旅遊、出版、跨國業務；比起被綁在同一個地方，你更適合彈性、能到處走動或接觸新事物的工作型態，接案或自由工作很適合你。", "你務實負責、目標導向，適合需要長期規劃、講求紀律的領域，例如管理、法律、金融、公部門；你天生適合走管理職，穩紮穩打的累積資歷很容易獲得晉升，是值得託付重任的類型。", "你思想前衛、重視創新，適合需要跳脫框架、關注未來趨勢的領域，例如科技、社會創新、設計、公益倡議；你不喜歡被傳統框架綁住，適合彈性自主的工作型態，接案、新創或非典型職涯都很適合你。", "你想像力豐富、富同理心，適合需要創意、藝術或療癒特質的領域，例如設計、音樂、心理諮商、公益服務；你在能發揮直覺與同理心的工作中最容易感到滿足，比起高壓競爭的環境，溫和有彈性的工作氛圍更適合你。"];
+// 金星星座：金錢價值觀與財運
+const VENUS_WEALTH = ["你的金錢觀衝動直接，容易因一時興起而消費，也敢於冒險投資；理財上建議設定明確的預算上限，把「想要」和「需要」分開，避免衝動購物影響長期規劃。", "你天生重視物質安全感，喜歡穩定累積、購買品質好的東西，理財偏向保守務實；你的財運穩健，適合儲蓄與長期投資，但也要留意別因為太重視物質享受而過度消費。", "你的消費習慣多元又善變，容易因為好奇心而購入各種新奇小物；理財上建議記帳追蹤自己的消費模式，避免因為分散的小額支出累積成一筆可觀的開銷。", "你的金錢觀與安全感和家庭緊密相連，喜歡為家人存錢、投資不動產或居家物品；你天生有儲蓄的直覺，但也要留意別因為情緒性消費而影響財務規劃。", "你偏好高品質、有面子的消費，喜歡在重要場合展現大方與品味；理財上你的收入潛力不錯，但也要留意別為了維持形象而過度消費，量力而為會更長久。", "你天生精打細算、重視CP值，理財習慣務實謹慎，擅長分析與規劃預算；你的財運穩健，適合精算型的投資工具，但也要留意別因過度謹慎而錯過該把握的機會。", "你喜歡投資在美感與人際關係上，消費偏好精緻、講究品味，也容易因為社交而增加開銷；理財上建議在社交花費與個人儲蓄之間找到平衡點。", "你的金錢觀深沉而神秘，善於掌控資源、也懂得投資眼光，適合長期布局型的理財方式；但也要留意對金錢的控制欲，避免因為過度謹慎而錯失分享與流動的機會。", "你的金錢觀開放樂觀，喜歡把錢花在旅行、學習與體驗上，不太在意物質累積；理財上建議建立基本的儲蓄習慣，為未來的自由留一些安全網。", "你天生務實保守，重視長期的財務規劃與資產累積，是天生的儲蓄好手；你的財運會隨著年紀增長越來越穩健，只是也要留意別因過度節省而錯過該投資自己的機會。", "你的消費習慣獨特，喜歡投資在科技、理念或社群相關的事物上，不太在意主流的物質標準；理財上建議建立清楚的財務目標，避免因為太隨性而忽略了規劃。", "你的金錢觀感性而直覺，容易因為同情心或一時感動而慷慨解囊；理財上建議設立明確的財務界線，避免因為心軟而影響自己的財務安全。"];
+// 金星星座：感情與人際吸引力
+const VENUS_ROMANCE = ["你戀愛時直接主動，喜歡追求的刺激感與新鮮感，容易被有活力、敢愛敢恨的對象吸引；感情中你重視自由與被尊重，太過黏膩的關係容易讓你想逃。", "你戀愛時穩定專一，重視實際的陪伴與親密感，喜歡被寵愛也樂於付出；一旦認定一段關係就會很難改變心意，但也要留意別因固執而錯過溝通的機會。", "你戀愛時重視心靈交流與話題的共鳴，容易被聰明風趣的對象吸引，喜歡在關係中保持新鮮感與變化；但也要留意別因三心二意而讓對方沒有安全感。", "你戀愛時溫柔體貼、重視情感的深度連結，很願意為對方付出與照顧；你渴望穩定與歸屬感，但也要留意別因過度敏感而把小事放大成關係的裂痕。", "你戀愛時熱情大方、喜歡在關係中被寵愛與崇拜，也樂於慷慨對待對方；你重視儀式感與被重視的感覺，但也要留意別讓自尊心影響溝通的空間。", "你戀愛時務實體貼，習慣用實際的行動表達關心，對伴侶的要求也偏高；你重視細節與可靠感，但也要留意別因過度挑剔而讓對方感到壓力。", "你戀愛時浪漫優雅，很重視關係中的和諧與平衡，天生擅長經營一段關係；你渴望被珍惜與陪伴，但也要留意別因害怕衝突而壓抑自己真實的感受。", "你戀愛時投入深刻、渴望全心全意的親密感，一旦愛上就很難輕易放手；你重視忠誠與信任，但也要留意占有欲與控制欲，適度給對方一些呼吸空間。", "你戀愛時樂觀直率，重視關係中的自由與共同成長，容易被有冒險精神的對象吸引；你享受戀愛的過程，但也要留意別因害怕被綁住而逃避承諾。", "你戀愛時務實穩重，不輕易表達感情但一旦承諾就會非常負責；你重視關係中的長期規劃與現實基礎，但也要留意別把感情經營得太像在完成任務。", "你戀愛時重視精神層面的契合與思想上的自由，喜歡把伴侶當成朋友一樣相處；你重視獨立空間，但也要留意別因為過度理性而讓對方感受不到情感的溫度。", "你戀愛時浪漫夢幻、富有犧牲奉獻的精神，容易被對方的故事或脆弱面打動；你渴望心靈合一的深刻連結，但也要留意別在關係中迷失自己的界線。"];
+// 木星星座：機會、成長與貴人方向
+const JUPITER_OPPORTUNITY = ["你的幸運領域在於主動出擊與開創新局，勇敢踏出第一步往往能為你帶來意外的機會與成長，貴人常出現在你展現行動力的時刻。", "你的幸運領域在於穩健的累積與實質的資源，長期投入的事物往往能為你帶來豐厚的回報，貴人常出現在與金錢、資源相關的場合。", "你的幸運領域在於學習與交流，廣泛涉獵不同領域的知識與人脈，往往能為你打開意想不到的門，貴人常出現在對話與分享之中。", "你的幸運領域在於家庭與人際的情感連結，用心經營關係與歸屬感，往往能為你帶來支持與機會，貴人常出現在親近的人之中。", "你的幸運領域在於展現自我與創造力，勇敢站上舞台、表達自己的才華，往往能吸引到欣賞你的貴人與機會。", "你的幸運領域在於專業與細節的累積，把一件事做到精益求精，往往能為你帶來口碑與信任，貴人常出現在專業領域之中。", "你的幸運領域在於人際關係與合作，善用你的協調能力促成雙贏的合作，往往能為你帶來意外的機會，貴人常出現在夥伴關係之中。", "你的幸運領域在於深度鑽研與轉化的能力，勇於面對困難、深入核心問題，往往能為你帶來突破性的成長，貴人常出現在關鍵的轉折時刻。", "你的幸運領域在於跨界與探索，走出舒適圈、接觸不同的文化與視野，往往能為你帶來意想不到的機會，貴人常出現在旅行或學習的路上。", "你的幸運領域在於責任與長期的努力，一步一腳印地累積實力與資歷，往往能為你帶來穩固的地位與尊重，貴人常出現在職場或專業領域中的前輩。", "你的幸運領域在於創新與群體的力量，參與理念相近的社群或倡議，往往能為你帶來志同道合的夥伴與機會，貴人常出現在網路或社群之中。", "你的幸運領域在於直覺與同理心，發揮你的想像力與關懷他人的能力，往往能為你帶來意想不到的貴人相助，機會常在不經意的善意之中出現。"];
+
+// 四大元素分布解讀（豐富／不足時的意涵）
+const ASTRO_ELEMENT_MEANING = {
+  火: "火元素旺盛，代表你充滿熱情、行動力與自信，樂於主動出擊、展現自我；但也要留意別因為太衝動而忽略了周全的考量。",
+  土: "土元素旺盛，代表你務實穩重、重視具體的成果與安全感，做事按部就班；但也要留意別因為太保守而錯過需要彈性應變的機會。",
+  風: "風元素旺盛，代表你思路靈活、善於溝通與社交，重視知識與人際交流；但也要留意別因為想太多而缺乏實際行動。",
+  水: "水元素旺盛，代表你感性直覺、情感豐富，善於同理他人的感受；但也要留意別讓情緒主導了理性的判斷。"
+};
+const ASTRO_ELEMENT_LACK = {
+  火: {
+    issue: "展現熱情與主動出擊的行動力較不足",
+    improve: "練習在小事上主動表達意見，多給自己一點冒險的空間。"
+  },
+  土: {
+    issue: "落實計畫、累積具體成果的耐性較不足",
+    improve: "把大目標拆解成具體的小步驟，逐步養成執行的習慣。"
+  },
+  風: {
+    issue: "理性溝通與客觀分析的習慣較不足",
+    improve: "重要決定前，多與人討論、蒐集不同角度的意見。"
+  },
+  水: {
+    issue: "情感表達與同理他人的敏感度較不足",
+    improve: "練習多留意自己與他人的情緒感受，適度表達關心。"
+  }
+};
+const ASTRO_ELEMENT_OPPORTUNITY = {
+  火: "近期適合主動出擊、勇於表現自己，行動力會是你最大的加分項。",
+  土: "近期適合穩紮穩打地累積實力，長期投入的事物容易開花結果。",
+  風: "近期適合多方學習與交流，拓展人脈與視野會為你帶來新機會。",
+  水: "近期適合傾聽內在直覺，順著情感與同理心行動，容易遇到對的人事物。"
+};
+// 元素優勢的精簡條列版本（用於命盤總結）
+const ASTRO_ELEMENT_STRENGTH = {
+  火: "行動力強、充滿熱情與自信，樂於主動出擊、展現自我。",
+  土: "務實穩重、重視具體成果，做事按部就班、值得信賴。",
+  風: "思路靈活、善於溝通與社交，重視知識與人際交流。",
+  水: "感性直覺、情感豐富，善於同理他人的感受。"
+};
+
+// 命盤總結（5+5+3）用的精簡條列：太陽、月亮、火星、金星各自的優勢／盲點單句版本
+const SUN_STRENGTH = ["行動力十足，決斷明快，是天生的開創者。", "務實可靠，意志堅定，值得他人信賴。", "反應靈活，學習力強，總能跟上變化。", "重情重義，善於照顧，是溫暖的存在。", "自信大方，領袖魅力強，能鼓舞人心。", "細心負責，追求完美，做事有條不紊。", "圓融親和，善於協調，是天生的橋樑。", "意志堅韌，洞察力強，做事全力以赴。", "樂觀開闊，勇於冒險，總能帶來正能量。", "自律負責，目標明確，穩健地邁向成功。", "獨立創新，思想前衛，總有獨到的見解。", "富同理心，直覺敏銳，充滿藝術天分。"];
+const SUN_BLINDSPOT = [{
+  issue: "性子急躁，容易半途而廢",
+  improve: "練習把大目標拆解成小階段，逐步累積耐心。"
+}, {
+  issue: "過於固執，不易妥協變通",
+  improve: "遇到新狀況時，練習先問自己「還有沒有別的可能」。"
+}, {
+  issue: "三心二意，難以深入專精",
+  improve: "為自己設定一個「主線任務」，其餘當作調劑即可。"
+}, {
+  issue: "情緒敏感，容易鑽牛角尖",
+  improve: "練習區分「事實」與「自己的想像」，避免過度解讀。"
+}, {
+  issue: "自尊心強，不易接受批評",
+  improve: "把建議當成禮物而非攻擊，練習先說「謝謝」再回應。"
+}, {
+  issue: "過度挑剔，容易帶給自己與他人壓力",
+  improve: "練習為每件事設一個「足夠好」的標準，而非要求滿分。"
+}, {
+  issue: "猶豫不決，害怕做出選擇得罪人",
+  improve: "練習限時做決定，時間到了就選當下最好的選項。"
+}, {
+  issue: "占有欲強，容易過度猜疑",
+  improve: "練習信任並給對方一些自主的空間。"
+}, {
+  issue: "容易誇大其詞，對承諾感到抗拒",
+  improve: "說出口前先想一想是否能真正做到。"
+}, {
+  issue: "過於嚴肅，容易忽略情感需求",
+  improve: "刻意安排放鬆與陪伴家人朋友的時間。"
+}, {
+  issue: "疏離冷漠，不擅長表達私人情感",
+  improve: "練習主動分享一件今天發生的小事給親近的人。"
+}, {
+  issue: "容易逃避現實，界線感較弱",
+  improve: "練習在答應別人之前，先確認這是否超出自己的負荷。"
+}];
+const MOON_STRENGTH = ["情感直率坦誠，不拖泥帶水。", "情緒穩定，是身邊人重要的定心力量。", "善於用言語表達感受，溝通力強。", "同理心強，是天生的照顧者。", "情感表達真誠溫暖，很有感染力。", "細膩體貼，總能注意到別人的需要。", "擅長營造和諧氣氛，人緣佳。", "情感深刻專一，值得信賴。", "樂觀豁達，情緒很少被困住太久。", "情緒穩重自持，關鍵時刻很可靠。", "情緒理性獨立，不輕易被牽著走。", "感受力細膩豐富，充滿慈悲心。"];
+const MOON_BLINDSPOT = [{
+  issue: "情緒來得快去得也快，容易衝動反應",
+  improve: "生氣或難過時，先深呼吸數到十再回應。"
+}, {
+  issue: "改變讓你沒安全感，容易固守舒適圈",
+  improve: "每個月給自己一個小小的新嘗試，練習適應變化。"
+}, {
+  issue: "想太多容易心神不寧、難以定下心",
+  improve: "睡前寫下腦中的紛雜念頭，讓思緒有個出口。"
+}, {
+  issue: "過度敏感，容易把小事放大",
+  improve: "情緒上來時，先讓自己冷靜一晚再做回應。"
+}, {
+  issue: "需要被關注，冷落時容易感到失落",
+  improve: "練習從自己身上找到肯定，而不完全依賴他人的目光。"
+}, {
+  issue: "容易因擔心犯錯而焦慮不安",
+  improve: "練習接受「已經做得夠好」這個事實。"
+}, {
+  issue: "太在意他人眼光，容易壓抑真實感受",
+  improve: "練習誠實表達，即使可能引起小小的不同意見。"
+}, {
+  issue: "不輕易信任，容易累積猜疑",
+  improve: "練習主動溝通疑慮，而不是默默觀察。"
+}, {
+  issue: "害怕被綁住，容易逃避深刻的情感連結",
+  improve: "練習在關係中多停留一會，不急著抽身。"
+}, {
+  issue: "習慣壓抑情緒，容易忽略自己的感受",
+  improve: "定期給自己一段不談公事、單純放鬆的時間。"
+}, {
+  issue: "情感表現疏離，讓親近的人感覺有距離",
+  improve: "練習偶爾示弱，讓身邊的人有機會靠近你。"
+}, {
+  issue: "容易被他人情緒淹沒，界線感薄弱",
+  improve: "練習分辨「這是我的情緒」還是「我接收到別人的情緒」。"
+}];
+const MARS_STRENGTH = ["行動派、敢衝敢拼，效率極高。", "做事穩健踏實，經得起長期考驗。", "一心多用，適應變化的能力強。", "做事用心，很會照顧團隊士氣。", "領導力強，能激勵團隊向前衝。", "執行力細膩精準，品質有保障。", "擅長協調合作，能促成雙贏。", "專注力強，一旦投入就全力以赴。", "勇於嘗試新領域，適應力強。", "紀律性強，是值得託付重任的人。", "點子多、敢於創新突破。", "創意與直覺兼具，善於發揮巧思。"];
+const MARS_BLINDSPOT = [{
+  issue: "衝過頭容易忽略風險與細節",
+  improve: "行動前先列出三個可能的風險，再決定是否出手。"
+}, {
+  issue: "改變步調太慢，容易錯過時機",
+  improve: "為重要決定設定明確的截止日期，逼自己不要拖延。"
+}, {
+  issue: "任務太多容易分身乏術、虎頭蛇尾",
+  improve: "每天只鎖定 1-2 個最重要的任務優先完成。"
+}, {
+  issue: "容易把情緒帶入工作，影響判斷",
+  improve: "練習把「工作上的事」和「個人感受」分開處理。"
+}, {
+  issue: "太重視主導權，不易放手交辦",
+  improve: "練習信任團隊成員，適度授權而非事必躬親。"
+}, {
+  issue: "過度追求完美，容易拖慢進度",
+  improve: "為任務設定明確的完成標準，達標就往下一步走。"
+}, {
+  issue: "猶豫不決，容易拖延重要決策",
+  improve: "練習限時決策，避免因猶豫而錯失時機。"
+}, {
+  issue: "處事強硬，不易與人妥協",
+  improve: "練習在堅持立場前，先聽完對方完整的理由。"
+}, {
+  issue: "對細節缺乏耐性，容易虎頭蛇尾",
+  improve: "找一個細心的夥伴互補，或用清單追蹤進度。"
+}, {
+  issue: "工作狂傾向，容易忽略休息",
+  improve: "把休息時間也排進行事曆，當成不可取消的行程。"
+}, {
+  issue: "想法跳躍，落地執行力較弱",
+  improve: "把創意想法拆解成具體可執行的步驟。"
+}, {
+  issue: "面對高壓環境容易逃避退縮",
+  improve: "提前規劃應對壓力的方式，例如找人討論或分段處理。"
+}];
+const VENUS_STRENGTH = ["行動力帶動桃花與機會，敢愛敢要。", "重情重義，經營關係與財富都穩健長久。", "魅力來自風趣的談吐與廣泛的興趣。", "用心經營關係，是值得依靠的伴侶。", "慷慨大方，感情與金錢都捨得投入。", "體貼務實，用行動證明心意。", "優雅有魅力，很懂得經營關係的和諧。", "情感深刻專一，投入的關係很難被取代。", "樂觀開放，戀愛與財務都充滿機會。", "務實可靠，是值得託付未來的對象。", "獨特有魅力，吸引志同道合的對象。", "浪漫體貼，很懂得付出與感動人心。"];
+const VENUS_BLINDSPOT = [{
+  issue: "戀愛與消費都容易一時衝動",
+  improve: "重要決定前先給自己一天的冷靜期。"
+}, {
+  issue: "太固執，關係卡住時不易轉圜",
+  improve: "練習在關係或財務決策中保留一點彈性。"
+}, {
+  issue: "三心二意，感情或財務都不夠專注",
+  improve: "練習在下決定後，至少堅持一段時間再評估。"
+}, {
+  issue: "情緒性消費、也容易情緒性投入感情",
+  improve: "消費或投入感情前，先確認這是理性選擇還是情緒反應。"
+}, {
+  issue: "愛面子，容易為排場過度花費",
+  improve: "消費前先問自己：這是為了自己還是為了別人的眼光？"
+}, {
+  issue: "過度挑剔，容易讓伴侶或自己感到壓力",
+  improve: "練習接受不完美，把標準放寬一些。"
+}, {
+  issue: "太重視他人眼光，容易委屈自己的真實需求",
+  improve: "練習誠實表達自己在關係或消費上的真實想法。"
+}, {
+  issue: "占有欲強，容易在關係與財務上都想掌控一切",
+  improve: "練習適度放手，給彼此與資源多一點流動的空間。"
+}, {
+  issue: "對承諾感到抗拒，財務也容易大而化之",
+  improve: "練習給關係和財務規劃多一點耐心與具體行動。"
+}, {
+  issue: "太重視現實條件，容易忽略情感的浪漫面",
+  improve: "刻意安排一些不計較「值不值得」的浪漫時刻。"
+}, {
+  issue: "情感疏離，財務決策也偏理性冷靜、少了溫度",
+  improve: "練習在關係中多一點情感表達，而非只講道理。"
+}, {
+  issue: "容易因心軟而在感情或金錢上被佔便宜",
+  improve: "練習設立清楚的界線，學會適度地說不。"
+}];
+// 木星星座：近期可把握的具體機會方向（用於命盤總結的「值得把握的事」）
+const MARS_OPPORTUNITY = ["近期適合主動爭取想要的機會，你的行動力正是最大的優勢。", "近期適合投入長期計畫，穩健的努力會逐漸看到成果。", "近期適合多方嘗試與學習，廣泛涉獵會為你帶來意外收穫。", "近期適合深化重要的人際與家庭連結，情感支持會是你的後盾。", "近期適合展現自己的才華，勇敢站上舞台會為你帶來關注與機會。", "近期適合精進專業技能，細節上的努力會被看見。", "近期適合尋求合作機會，好的夥伴關係會讓你事半功倍。", "近期適合深入鑽研核心目標，專注投入會帶來突破性的成果。", "近期適合跨出舒適圈探索新領域，冒險會為你打開新的視野。", "近期適合爭取更高的責任與位階，紮實的努力容易被看見與晉升。", "近期適合提出創新的想法，你的與眾不同會吸引對的人與機會。", "近期適合發揮創意與直覺，跟隨內心的靈感行動會有意外收穫。"];
+
+// 綜合太陽、月亮、火星、金星、木星與元素分布，統整成命盤總結的 5 大優勢／5 個注意／3 件值得把握的事
+function buildAstroChartSummary(natal) {
+  const sunIdx = natal.planets.sun.signIdx;
+  const moonIdx = natal.planets.moon.signIdx;
+  const marsIdx = natal.planets.mars.signIdx;
+  const venusIdx = natal.planets.venus.signIdx;
+  const jupiterIdx = natal.planets.jupiter.signIdx;
+  const counts = astroElementCounts(natal);
+  const sortedEl = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const topEl = sortedEl[0][0];
+  const weakEl = sortedEl[sortedEl.length - 1][0];
+  const strengths = [{
+    text: SUN_STRENGTH[sunIdx],
+    from: `依太陽星座「${ZODIAC_SIGNS[sunIdx]}」`
+  }, {
+    text: MOON_STRENGTH[moonIdx],
+    from: `依月亮星座「${ZODIAC_SIGNS[moonIdx]}」`
+  }, {
+    text: MARS_STRENGTH[marsIdx],
+    from: `依火星星座「${ZODIAC_SIGNS[marsIdx]}」`
+  }, {
+    text: VENUS_STRENGTH[venusIdx],
+    from: `依金星星座「${ZODIAC_SIGNS[venusIdx]}」`
+  }, {
+    text: ASTRO_ELEMENT_STRENGTH[topEl],
+    from: `依四大元素分布中最旺的「${topEl}」`
+  }];
+  const watchouts = [{
+    text: SUN_BLINDSPOT[sunIdx].issue,
+    improve: SUN_BLINDSPOT[sunIdx].improve,
+    from: `依太陽星座「${ZODIAC_SIGNS[sunIdx]}」`
+  }, {
+    text: MOON_BLINDSPOT[moonIdx].issue,
+    improve: MOON_BLINDSPOT[moonIdx].improve,
+    from: `依月亮星座「${ZODIAC_SIGNS[moonIdx]}」`
+  }, {
+    text: MARS_BLINDSPOT[marsIdx].issue,
+    improve: MARS_BLINDSPOT[marsIdx].improve,
+    from: `依火星星座「${ZODIAC_SIGNS[marsIdx]}」`
+  }, {
+    text: VENUS_BLINDSPOT[venusIdx].issue,
+    improve: VENUS_BLINDSPOT[venusIdx].improve,
+    from: `依金星星座「${ZODIAC_SIGNS[venusIdx]}」`
+  }, {
+    text: ASTRO_ELEMENT_LACK[weakEl].issue,
+    improve: ASTRO_ELEMENT_LACK[weakEl].improve,
+    from: `依四大元素分布中最弱的「${weakEl}」`
+  }];
+  const opportunities = [{
+    text: JUPITER_OPPORTUNITY[jupiterIdx],
+    from: `依木星星座「${ZODIAC_SIGNS[jupiterIdx]}」`
+  }, {
+    text: ASTRO_ELEMENT_OPPORTUNITY[topEl],
+    from: `依四大元素分布中最旺的「${topEl}」`
+  }, {
+    text: MARS_OPPORTUNITY[marsIdx],
+    from: `依火星星座「${ZODIAC_SIGNS[marsIdx]}」`
+  }];
+  return {
+    strengths,
+    watchouts,
+    opportunities
+  };
+}
+
 // 相位：合相、六分相、四分相、三分相、對分相（標準容許度）
 const ASPECTS = [{
   name: "合相",
@@ -2243,6 +2525,38 @@ function StarScore({
     }
   })));
 }
+// 命盤總結（5+5+3）用的條列元件：八字、星座共用，item 需含 {text, from}，可選 {improve}
+function SummaryBulletGroup({
+  items,
+  color
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 9
+    }
+  }, items.map((it, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      fontSize: 12.5,
+      lineHeight: 1.6,
+      color: "#4A4438"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: color,
+      fontWeight: 700
+    }
+  }, i + 1, ". "), it.text, it.improve ? "（" + it.improve + "）" : "", /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: "block",
+      fontSize: 10.5,
+      color: "#A79C86",
+      marginTop: 2
+    }
+  }, it.from))));
+}
 function ElementTag({
   el,
   small
@@ -3031,32 +3345,6 @@ function BaziCard({
     const wealthInfo = analyzeWealthType(tgProfile);
     const socialType = analyzeSocialType(tgProfile);
     const summary = buildChartSummary(bazi, strength, tgProfile, wealthInfo, socialType);
-    const bulletGroup = (items, color) => /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 9
-      }
-    }, items.map((it, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        fontSize: 12.5,
-        lineHeight: 1.6,
-        color: "#4A4438"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: color,
-        fontWeight: 700
-      }
-    }, i + 1, ". "), it.text, /*#__PURE__*/React.createElement("span", {
-      style: {
-        display: "block",
-        fontSize: 10.5,
-        color: "#A79C86",
-        marginTop: 2
-      }
-    }, it.from))));
     return /*#__PURE__*/React.createElement("div", {
       style: styles.subBlock
     }, /*#__PURE__*/React.createElement("div", {
@@ -3073,21 +3361,30 @@ function BaziCard({
         color: "#3F7A3D",
         margin: "0 0 8px"
       }
-    }, "★ 5 個最大優勢"), bulletGroup(summary.strengths, "#3F7A3D"), /*#__PURE__*/React.createElement("div", {
+    }, "★ 5 個最大優勢"), /*#__PURE__*/React.createElement(SummaryBulletGroup, {
+      items: summary.strengths,
+      color: "#3F7A3D"
+    }), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         fontWeight: 700,
         color: "#B14338",
         margin: "16px 0 8px"
       }
-    }, "▲ 5 個需要注意的地方"), bulletGroup(summary.watchouts, "#B14338"), /*#__PURE__*/React.createElement("div", {
+    }, "▲ 5 個需要注意的地方"), /*#__PURE__*/React.createElement(SummaryBulletGroup, {
+      items: summary.watchouts,
+      color: "#B14338"
+    }), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         fontWeight: 700,
         color: "#b3492b",
         margin: "16px 0 8px"
       }
-    }, "✦ 3 件未來值得把握的事"), bulletGroup(summary.opportunities, "#b3492b"), /*#__PURE__*/React.createElement("p", {
+    }, "✦ 3 件未來值得把握的事"), /*#__PURE__*/React.createElement(SummaryBulletGroup, {
+      items: summary.opportunities,
+      color: "#b3492b"
+    }), /*#__PURE__*/React.createElement("p", {
       style: {
         ...styles.subBlockText,
         marginTop: 14,
@@ -3519,6 +3816,17 @@ function AstroCard({
   const restPlanets = PLANET_BODIES.slice(2); // mercury..pluto
   const counts = astroElementCounts(natal);
   const maxCount = Math.max(1, ...Object.values(counts));
+  const sortedElByCount = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const topEl = sortedElByCount[0][0];
+  const weakEl = sortedElByCount[sortedElByCount.length - 1][0];
+  const sunP = natal.planets.sun;
+  const moonP = natal.planets.moon;
+  const marsP = natal.planets.mars;
+  const venusP = natal.planets.venus;
+  const jupiterP = natal.planets.jupiter;
+  const ascP = natal.ascendant;
+  const weakElNote = "另外，「" + weakEl + "」元素在命盤中比例較低：" + ASTRO_ELEMENT_LACK[weakEl].issue + "，" + ASTRO_ELEMENT_LACK[weakEl].improve;
+  const astroSummary = buildAstroChartSummary(natal);
   return /*#__PURE__*/React.createElement("div", {
     style: styles.card
   }, /*#__PURE__*/React.createElement("div", {
@@ -3631,13 +3939,23 @@ function AstroCard({
   })))))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowMore(v => !v),
     style: styles.moreToggle
-  }, showMore ? "收起其他行星星座" : "查看其他行星落座", showMore ? /*#__PURE__*/React.createElement(ChevronUp, {
+  }, showMore ? "收起命盤深度解讀" : "查看命盤深度解讀", showMore ? /*#__PURE__*/React.createElement(ChevronUp, {
     size: 13
   }) : /*#__PURE__*/React.createElement(ChevronDown, {
     size: 13
   })), showMore && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "其他行星落座"), /*#__PURE__*/React.createElement("div", {
+    style: {
       display: "grid",
       gridTemplateColumns: isWide ? "repeat(4, 1fr)" : "repeat(2, 1fr)",
       gap: 8
@@ -3649,7 +3967,11 @@ function AstroCard({
     const p = natal.planets[key];
     return /*#__PURE__*/React.createElement("div", {
       key: key,
-      style: styles.subBlock
+      style: {
+        background: "#fff",
+        borderRadius: 8,
+        padding: 8
+      }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
@@ -3675,7 +3997,117 @@ function AstroCard({
       marginTop: 10,
       lineHeight: 1.6
     }
-  }, "上升星座需要精確出生時辰與出生地經緯度，補齊「新增／編輯命盤」中的資訊即可解鎖。"));
+  }, "上升星座需要精確出生時辰與出生地經緯度，補齊「新增／編輯命盤」中的資訊即可解鎖。")), /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "核心個性解讀"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "太陽在", sunP.sign, "：", SUN_TRAITS[sunP.signIdx]), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8
+    }
+  }, "月亮在", moonP.sign, "：", MOON_TRAITS[moonP.signIdx]), ascP ? /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8
+    }
+  }, "上升在", ascP.sign, "：", ASC_TRAITS[ascP.signIdx]) : /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8,
+      color: "#A79C86"
+    }
+  }, "上升星座尚未解鎖，補齊出生時辰與出生地後，個性解讀會更完整。")), /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "元素分布解讀"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, ASTRO_ELEMENT_MEANING[topEl]), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8,
+      color: "#A79C86"
+    }
+  }, weakElNote)), /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "工作事業適配"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "火星在", marsP.sign, "：", MARS_CAREER[marsP.signIdx])), /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "財運與金錢觀"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "金星在", venusP.sign, "：", VENUS_WEALTH[venusP.signIdx])), /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "感情與人際"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "金星在", venusP.sign, "：", VENUS_ROMANCE[venusP.signIdx]), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8,
+      color: "#A79C86"
+    }
+  }, "此外，你的月亮星座（", moonP.sign, "）也會影響你在關係中的情緒需求：", MOON_TRAITS[moonP.signIdx])), /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "機會與貴人"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "木星在", jupiterP.sign, "：", JUPITER_OPPORTUNITY[jupiterP.signIdx])), /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "命盤總結：優勢、盲點與機會"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginBottom: 12
+    }
+  }, "綜合太陽、月亮、火星、金星、木星與四大元素分布，整理成最精簡的重點摘要；每一條後方都附上依據來源。"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#3F7A3D",
+      margin: "0 0 8px"
+    }
+  }, "★ 5 個最大優勢"), /*#__PURE__*/React.createElement(SummaryBulletGroup, {
+    items: astroSummary.strengths,
+    color: "#3F7A3D"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#B14338",
+      margin: "16px 0 8px"
+    }
+  }, "▲ 5 個需要注意的地方"), /*#__PURE__*/React.createElement(SummaryBulletGroup, {
+    items: astroSummary.watchouts,
+    color: "#B14338"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#b3492b",
+      margin: "16px 0 8px"
+    }
+  }, "✦ 3 件未來值得把握的事"), /*#__PURE__*/React.createElement(SummaryBulletGroup, {
+    items: astroSummary.opportunities,
+    color: "#b3492b"
+  }), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 14,
+      fontSize: 11,
+      color: "#A79C86"
+    }
+  }, "此總結為星座命盤各項分析的精簡整理，屬於自我覺察與探索的參考工具，命盤不能決定人生的必然結果，實際發展仍取決於你的選擇與努力。"))));
 }
 
 /* ---------------- 星座命盤運勢（今日／流年皆共用） ---------------- */
