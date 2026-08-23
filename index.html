@@ -2545,8 +2545,14 @@ function astroDynamicNote(key, unit, fortune) {
   } = strongest;
   const transitSign = fortune.transits[transitKey];
   const trait = ZODIAC_TRAITS[transitSign.signIdx];
-  const guidance = ASTRO_CATEGORY_ACTION[key][aspect.type](unit);
-  return ASTRO_CATEGORY_TEMPLATE[key](unit, PLANET_LABEL[transitKey], transitSign.sign, trait, NATAL_LABEL[natalKey], aspect.name, ASPECT_EFFECT[aspect.type], guidance);
+  const score = fortune.scores[key];
+  // 語氣（吉凶效果與建議）一律依「該項目當天實際分數」決定，而不是只看最強那組相位自己的吉凶類型——
+  // 因為分數是該項目所有配對相位加總而成，可能出現「最強的一組相位偏張力，但其他相位加總後淨分數仍偏高」
+  // 的情況，此時若只依最強相位判斷語氣，就會與星等（分數）矛盾。相位名稱（如「四分相」）屬於客觀事實，
+  // 仍呈現實際找到的最強相位，只有語氣（effect／guidance）改依淨分數決定。
+  const tierType = score >= 4 ? "harmonious" : score <= 2 ? "tense" : "neutral";
+  const guidance = ASTRO_CATEGORY_ACTION[key][tierType](unit);
+  return ASTRO_CATEGORY_TEMPLATE[key](unit, PLANET_LABEL[transitKey], transitSign.sign, trait, NATAL_LABEL[natalKey], aspect.name, ASPECT_EFFECT[tierType], guidance);
 }
 
 /* ============================================================
@@ -2935,6 +2941,7 @@ function BaziApp() {
   })), tab === "dayun" && dayun && /*#__PURE__*/React.createElement(DayunSection, {
     dayun: dayun,
     bazi: bazi,
+    strength: strength,
     birthYear: active.birth.y,
     isWide: isWide
   })), system === "astro" && (!ASTRO_AVAILABLE ? /*#__PURE__*/React.createElement("div", {
@@ -3314,7 +3321,7 @@ function BaziCard({
         fontSize: 11,
         color: "#A79C86"
       }
-    }, "此分析採用簡化的整張命盤十神分布估算（含四柱地支藏干加權），主要反映性格傾向與適配方向，實際職涯選擇仍會受個人興趣、學經歷、大運流年等因素共同影響。")), /*#__PURE__*/React.createElement("div", {
+    }, "此分析採用簡化的整張命盤十神分布估算（含四柱地支藏干加權），主要反映性格傾向與適配方向，實際職涯選擇仍會受個人興趣、學經歷、大運流年等因素共同影響。這裡取的是整張命盤中「力量最強」的十神（十種皆有可能），用來描述你整體的主導氣質如何展現在工作上；下方的財運分類、感情與婚姻、人際與貴人則是分別鎖定特定範圍做比較（例如財運只比較正財與偏財），彼此計算方式不同，若剛好指向同一個十神，代表這股力量在你命盤中確實顯著主導、貫穿多個面向，並非重複套用同一個結果。")), /*#__PURE__*/React.createElement("div", {
       style: styles.subBlock
     }, /*#__PURE__*/React.createElement("div", {
       style: styles.subBlockTitle
@@ -3727,6 +3734,7 @@ function FortuneSection({
 function DayunSection({
   dayun,
   bazi,
+  strength,
   birthYear,
   isWide
 }) {
@@ -3776,6 +3784,12 @@ function DayunSection({
     const isOpen = openIdx === i;
     const calYearStart = birthYear + p.startAge;
     const calYearEnd = birthYear + p.endAge;
+    const stemEl = STEM_ELEMENT[p.stemIdx];
+    const isFav = strength && strength.favorable.includes(stemEl);
+    const isUnfav = strength && strength.unfavorable.includes(stemEl);
+    const favTag = isFav ? "喜用" : isUnfav ? "忌神" : null;
+    const favColor = isFav ? "#3F7A3D" : "#B14338";
+    const favNote = isFav ? `這十年天干「${STEMS[p.stemIdx]}」對應的「${stemEl}」，正好是你命局判定的喜用神方向，整體而言這十年走勢偏向助力，適合積極開展、把握機會。` : isUnfav ? `這十年天干「${STEMS[p.stemIdx]}」對應的「${stemEl}」，落在你命局判定的忌神方向，行運上容易遇到較多考驗，宜穩健布局、避免躁進擴張，多留一點餘裕因應變化。` : `這十年天干「${STEMS[p.stemIdx]}」對應的「${stemEl}」，與你命局的喜忌關係較不明顯，整體起伏不算大，可依原有步調穩健經營。`;
     return /*#__PURE__*/React.createElement("div", {
       key: i,
       style: styles.fortuneCard
@@ -3800,14 +3814,26 @@ function DayunSection({
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 13,
-        fontWeight: 600
+        fontWeight: 600,
+        display: "flex",
+        alignItems: "center",
+        gap: 6
       }
     }, p.startAge, "～", p.endAge, " 歲\u3000", /*#__PURE__*/React.createElement("span", {
       style: {
         color: "#A79C86",
         fontWeight: 400
       }
-    }, "(", calYearStart, "–", calYearEnd, ")")), /*#__PURE__*/React.createElement("div", {
+    }, "(", calYearStart, "–", calYearEnd, ")"), favTag && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 700,
+        color: favColor,
+        border: `1px solid ${favColor}`,
+        borderRadius: 8,
+        padding: "0 5px"
+      }
+    }, favTag)), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: "#8A8272"
@@ -3825,9 +3851,20 @@ function DayunSection({
         margin: "0 0 8px",
         lineHeight: 1.7
       }
-    }, info.desc), /*#__PURE__*/React.createElement("p", {
+    }, info.desc), strength && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
+        lineHeight: 1.7,
+        color: favColor
+      }
+    }, favNote), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "就工作與財運傾向來說：", CAREER_FIT_TEXT[god]), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: 0,
         lineHeight: 1.7
       }
     }, "這十年整體以「", god, "」為主軸，", ADVICE[god].yi.length ? `較適合把握${ADVICE[god].yi.slice(0, 2).join("、")}等方向；` : "", "也要留意", ADVICE[god].ji.slice(0, 2).join("、"), "相關的風險，行運期間仍會受當年流年干支疊加影響而有起伏，此處僅呈現十年基調。")));
@@ -3839,7 +3876,7 @@ function DayunSection({
       lineHeight: 1.6,
       padding: "0 2px"
     }
-  }, "說明：起運歲數以出生時刻到最近節氣的距離估算（3天≈1歲），為簡化估算值，專業排盤可能略有±1個月左右差異。"));
+  }, "說明：起運歲數以出生時刻到最近節氣的距離估算（3天≈1歲），為簡化估算值，專業排盤可能略有±1個月左右差異。「就工作與財運傾向來說」的段落與命盤卡片中的「工作事業適配」共用同一套十神對照內容，差別在於這裡呈現的是這十年運柱所形成的十神，而命盤卡片呈現的是整張命盤中最主導的十神，兩者用途不同、並不衝突。"));
 }
 
 /* ---------------- 星座命盤卡片（本命盤） ---------------- */
