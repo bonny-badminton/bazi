@@ -467,6 +467,28 @@ function RefreshCw({
     d: "M8 16H3v5"
   }));
 }
+function Home({
+  size = 16,
+  color = "currentColor",
+  style
+}) {
+  return /*#__PURE__*/React.createElement("svg", {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: color,
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    style: style
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M3 10.5 12 3l9 7.5"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"
+  }));
+}
+const h = React.createElement;
 function GraduationCap({
   size = 16,
   color = "currentColor",
@@ -1316,6 +1338,250 @@ function computeAstroCycles(natal, birthYear) {
     });
   }
   return periods;
+}
+
+/* =====================================================================
+   紫微斗數（第一階段：本命盤 + 十四主星 + 大限）
+   排盤邏輯依據：
+   - 農曆換算：以「定氣法」計算冬至與朔（新月），沒有中氣的月份為閏月
+     （標準農曆置閏規則，用 astronomy-engine 做實際天文計算，非查表估算）
+   - 命宮／身宮：寅起正月順數生月，該宮起子時逆數（命宮）／順數（身宮）生時
+   - 命宮干：沿用八字「五虎遁」表，由寅宮起算至命宮地支
+   - 五行局：命宮干支之六十甲子納音五行
+   - 紫微星：「生日除局數，商數定紫微」公式（已交叉驗證兩組真實案例）
+   - 紫微星系／天府星系：標準口訣（紫微逆佈、天府順佈）
+   - 大限：起運歲數＝局數，陽男陰女順行、陰男陽女逆行（規則與八字大運相同）
+   ===================================================================== */
+
+function winterSolsticeJD(year) {
+  const guess = julianDateUTC(year, 12, 21, 12, 0);
+  return findLongitudeCrossing(guess - 10, guess + 10, 270);
+}
+function dateToJD(date) {
+  return date.getTime() / 86400000 + 2440587.5;
+}
+function jdToDate(jd) {
+  return new Date((jd - 2440587.5) * 86400000);
+}
+function nextNewMoonJD(afterJD) {
+  const t = window.Astronomy.MakeTime(jdToDate(afterJD + 0.5));
+  const r = window.Astronomy.SearchMoonPhase(0, t, 35);
+  return dateToJD(r.date);
+}
+function newMoonOnOrBeforeJD(jd) {
+  let searchDate = jdToDate(jd - 35);
+  let candidate = null;
+  for (let i = 0; i < 4; i++) {
+    const t = window.Astronomy.MakeTime(searchDate);
+    const r = window.Astronomy.SearchMoonPhase(0, t, 35);
+    const rjd = dateToJD(r.date);
+    if (rjd <= jd + 1e-6) {
+      candidate = rjd;
+      searchDate = new Date(r.date.getTime() + 2 * 86400000);
+    } else break;
+  }
+  return candidate;
+}
+// 兩個時刻之間跨越了幾個「30 度整數倍」的太陽黃經點（＝中氣）。0 代表這段期間沒有中氣，即為閏月。
+function zhongqiCrossedCount(jd1, jd2) {
+  const lon1 = solarLongitude(jd1);
+  let lon2 = solarLongitude(jd2);
+  if (lon2 < lon1) lon2 += 360;
+  return Math.floor(lon2 / 30) - Math.floor(lon1 / 30);
+}
+function localCal_UTC8(jd) {
+  const d = jdToDate(jd);
+  const local = new Date(d.getTime() + 8 * 3600 * 1000);
+  return {
+    y: local.getUTCFullYear(),
+    m: local.getUTCMonth() + 1,
+    d: local.getUTCDate()
+  };
+}
+// 將國曆生辰換算為農曆年、月（含閏月標記）、日。
+function computeLunarDate(y, m, d, hour, minute) {
+  const civilDate = new Date(Date.UTC(y, m - 1, d, (hour ?? 12) - CIVIL_TZ_OFFSET, minute ?? 0));
+  const jdCivil = dateToJD(civilDate);
+  let wsLow = winterSolsticeJD(y - 1);
+  let wsHigh = winterSolsticeJD(y);
+  if (jdCivil < wsLow) {
+    wsHigh = wsLow;
+    wsLow = winterSolsticeJD(y - 2);
+  } else if (jdCivil >= wsHigh) {
+    wsLow = wsHigh;
+    wsHigh = winterSolsticeJD(y + 1);
+  }
+  const m0 = newMoonOnOrBeforeJD(wsLow);
+  const newMoons = [m0];
+  while (newMoons.length < 16) {
+    newMoons.push(nextNewMoonJD(newMoons[newMoons.length - 1]));
+  }
+  let monthNumber = 11;
+  const monthMeta = [{
+    start: newMoons[0],
+    monthNumber: 11,
+    isLeap: false
+  }];
+  for (let i = 1; i < newMoons.length - 1; i++) {
+    const count = zhongqiCrossedCount(newMoons[i], newMoons[i + 1]);
+    if (count === 0) {
+      monthMeta.push({
+        start: newMoons[i],
+        monthNumber,
+        isLeap: true
+      });
+    } else {
+      monthNumber = monthNumber % 12 + 1;
+      monthMeta.push({
+        start: newMoons[i],
+        monthNumber,
+        isLeap: false
+      });
+    }
+  }
+  const civilCal = localCal_UTC8(jdCivil);
+  const civilCalJDN = toJDN(civilCal.y, civilCal.m, civilCal.d);
+  let curIdx = 0;
+  for (let i = 0; i < monthMeta.length; i++) {
+    const sc = localCal_UTC8(monthMeta[i].start);
+    const startCalJDN = toJDN(sc.y, sc.m, sc.d);
+    if (startCalJDN <= civilCalJDN) curIdx = i;else break;
+  }
+  const monthEntry = monthMeta[curIdx];
+  const startCal = localCal_UTC8(monthEntry.start);
+  const lunarDay = toJDN(civilCal.y, civilCal.m, civilCal.d) - toJDN(startCal.y, startCal.m, startCal.d) + 1;
+  const cnyEntry = monthMeta.find(e => e.monthNumber === 1 && !e.isLeap);
+  let lunarYear;
+  if (!cnyEntry) {
+    lunarYear = y;
+  } else {
+    const cnyCal = localCal_UTC8(cnyEntry.start);
+    const cnyCalJDN = toJDN(cnyCal.y, cnyCal.m, cnyCal.d);
+    lunarYear = civilCalJDN >= cnyCalJDN ? cnyCal.y : cnyCal.y - 1;
+  }
+  return {
+    lunarYear,
+    lunarMonth: monthEntry.monthNumber,
+    isLeapMonth: monthEntry.isLeap,
+    lunarDay: Math.max(1, Math.min(30, lunarDay))
+  };
+}
+const PALACE_NAMES = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "交友", "官祿", "田宅", "福德", "父母"];
+const BUREAU_INFO = {
+  2: {
+    name: "水二局"
+  },
+  3: {
+    name: "木三局"
+  },
+  4: {
+    name: "金四局"
+  },
+  5: {
+    name: "土五局"
+  },
+  6: {
+    name: "火六局"
+  }
+};
+// 六十甲子納音五行局數（每兩個甲子一組），局數：金4／木3／水2／火6／土5
+const NAYIN_BUREAU_PAIRS = [4, 6, 3, 5, 4, 6, 2, 5, 4, 3, 2, 5, 6, 3, 2, 4, 6, 3, 5, 4, 6, 2, 5, 4, 3, 2, 5, 6, 3, 2];
+function nayinBureau(stemIdx, branchIdx) {
+  let idx = -1;
+  for (let k = 0; k < 60; k++) {
+    if (k % 10 === stemIdx && k % 12 === branchIdx) {
+      idx = k;
+      break;
+    }
+  }
+  return NAYIN_BUREAU_PAIRS[Math.floor(idx / 2)];
+}
+// 安紫微星訣：商數＝⌈日/局⌉，差數＝商×局－日；差為奇則「商－差」，差為偶則「商＋差」，
+// 再從寅宮起算該數值即為紫微所在宮位。
+function ziweiStarPosition(bureau, lunarDay) {
+  const F = bureau,
+    D = lunarDay;
+  const Q = Math.ceil(D / F);
+  const C = Q * F - D;
+  const N = C % 2 === 1 ? Q - C : Q + C;
+  return ((1 + N) % 12 + 12) % 12;
+}
+function computeZiwei(profile) {
+  const hasTime = !!profile.hasTime;
+  const hourForCalc = hasTime ? profile.birth.h : 12;
+  const lunar = computeLunarDate(profile.birth.y, profile.birth.m, profile.birth.d, hourForCalc, hasTime ? profile.birth.min : 0);
+  const hourBranchIdx = Math.floor((hourForCalc + 1) % 24 / 2);
+  const yearStemIdx = ((lunar.lunarYear - 4) % 10 + 10) % 10;
+  const monthForPalace = lunar.lunarMonth;
+  const afterMonthIdx = (1 + monthForPalace) % 12; // 月支宮位（子時基準）
+  const lifePalaceBranchIdx = ((afterMonthIdx - hourBranchIdx) % 12 + 12) % 12;
+  const bodyPalaceBranchIdx = (afterMonthIdx + hourBranchIdx) % 12;
+  const firstMonthStem = [2, 4, 6, 8, 0][yearStemIdx % 5]; // 五虎遁（與八字共用）
+  const lifeOffsetFromYin = (lifePalaceBranchIdx - 2 + 12) % 12;
+  const lifePalaceStemIdx = (firstMonthStem + lifeOffsetFromYin) % 10;
+  const bureau = nayinBureau(lifePalaceStemIdx, lifePalaceBranchIdx);
+  const bureauInfo = BUREAU_INFO[bureau];
+  const zwPos = ziweiStarPosition(bureau, lunar.lunarDay);
+  const tfPos = (4 - zwPos + 12) % 12;
+  const starMap = {};
+  const place = (branchIdx, star) => {
+    (starMap[branchIdx] = starMap[branchIdx] || []).push(star);
+  };
+  place(zwPos, "紫微");
+  place((zwPos - 1 + 12) % 12, "天機");
+  place((zwPos - 3 + 12) % 12, "太陽");
+  place((zwPos - 4 + 12) % 12, "武曲");
+  place((zwPos - 5 + 12) % 12, "天同");
+  place((zwPos - 8 + 12) % 12, "廉貞");
+  place(tfPos, "天府");
+  place((tfPos + 1) % 12, "太陰");
+  place((tfPos + 2) % 12, "貪狼");
+  place((tfPos + 3) % 12, "巨門");
+  place((tfPos + 4) % 12, "天相");
+  place((tfPos + 5) % 12, "天梁");
+  place((tfPos + 6) % 12, "七殺");
+  place((tfPos + 10) % 12, "破軍");
+  const palaces = PALACE_NAMES.map((name, i) => {
+    const branchIdx = ((lifePalaceBranchIdx - i) % 12 + 12) % 12;
+    const offsetFromYin = (branchIdx - 2 + 12) % 12;
+    const stemIdx = (firstMonthStem + offsetFromYin) % 10;
+    return {
+      name,
+      branchIdx,
+      stemIdx,
+      stars: starMap[branchIdx] || [],
+      isBody: branchIdx === bodyPalaceBranchIdx
+    };
+  });
+  return {
+    lunar,
+    hasTime,
+    yearStemIdx,
+    lifePalaceBranchIdx,
+    lifePalaceStemIdx,
+    bodyPalaceBranchIdx,
+    bureau,
+    bureauInfo,
+    palaces
+  };
+}
+// 大限（十年運限）：起運歲＝局數，陽男陰女順行、陰男陽女逆行——規則與八字大運相同。
+function computeZiweiDecades(bureau, lifePalaceBranchIdx, isMale, yearStemIdx, palaces) {
+  const yearYang = STEM_YY[yearStemIdx] === "陽";
+  const forward = yearYang && isMale || !yearYang && !isMale;
+  const decades = [];
+  for (let i = 0; i < 12; i++) {
+    const branchIdx = forward ? (lifePalaceBranchIdx + i) % 12 : ((lifePalaceBranchIdx - i) % 12 + 12) % 12;
+    const palace = palaces.find(p => p.branchIdx === branchIdx);
+    decades.push({
+      startAge: bureau + i * 10,
+      endAge: bureau + i * 10 + 9,
+      branchIdx,
+      palaceName: palace ? palace.name : "",
+      stars: palace ? palace.stars : []
+    });
+  }
+  return decades;
 }
 // 地支藏干對照表：每個地支所藏的天干與權重（本氣權重最高，中氣、餘氣次之），
 // 用於計算「整張命盤」的十神分布，而不只是四柱天干本身。權重為簡化估算，僅供分析參考。
@@ -2690,13 +2956,31 @@ function BaziApp() {
   const [viewDate, setViewDate] = useState(todayISO());
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [tab, setTab] = useState("day"); // "day" | "year" | "dayun"
-  const [system, setSystem] = useState("bazi"); // "bazi" | "astro"
+  const [system, setSystem] = useState("bazi"); // "bazi" | "astro" | "ziwei"
   const [astroTab, setAstroTab] = useState("today"); // "today" | "year" | "cycle"
+  const [ziweiTab, setZiweiTab] = useState("chart"); // "chart" | "decade" | "year"
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null); // category detail expand
   const [refreshing, setRefreshing] = useState(false);
+  const [route, setRoute] = useState("home"); // "home"|"people"|"chart"|"div-tool"|"div-mode"|"div-person"|"div-topic"|"div-duration"|"div-result"
+  const [divTool, setDivTool] = useState(null); // "yijing" | "tarot"
+  const [divLinked, setDivLinked] = useState(null); // true | false
+  const [divPersonId, setDivPersonId] = useState(null);
+  const [divTopic, setDivTopic] = useState(null);
+  const [divDuration, setDivDuration] = useState(null);
   const isWide = useIsWide();
+  const goHome = () => setRoute("home");
+  const routeLabel = {
+    "people": "命盤",
+    "chart": "命盤",
+    "div-tool": "占卜",
+    "div-mode": "占卜",
+    "div-person": "占卜",
+    "div-topic": "占卜",
+    "div-duration": "占卜",
+    "div-result": "占卜"
+  }[route] || "";
   const forceRefreshApp = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -2751,6 +3035,7 @@ function BaziApp() {
       activeProfileId: profile.id
     });
     setShowForm(false);
+    setRoute("chart");
   };
   const deleteProfile = async id => {
     const list = profiles.filter(p => p.id !== id);
@@ -2810,6 +3095,18 @@ function BaziApp() {
     if (!natal || !active) return null;
     return computeAstroCycles(natal, active.birth.y);
   }, [natal, active]);
+  const ziwei = useMemo(() => {
+    if (!active) return null;
+    try {
+      return computeZiwei(active);
+    } catch (e) {
+      return null;
+    }
+  }, [active]);
+  const ziweiDecades = useMemo(() => {
+    if (!ziwei || !active) return null;
+    return computeZiweiDecades(ziwei.bureau, ziwei.lifePalaceBranchIdx, active.gender !== "female", ziwei.yearStemIdx, ziwei.palaces);
+  }, [ziwei, active]);
   if (loading) {
     return /*#__PURE__*/React.createElement("div", {
       style: styles.page
@@ -2829,27 +3126,7 @@ function BaziApp() {
       }
     }), "載入中…"), /*#__PURE__*/React.createElement("style", null, `@keyframes spin{to{transform:rotate(360deg)}}`));
   }
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      ...styles.page,
-      maxWidth: isWide ? 860 : 480
-    }
-  }, /*#__PURE__*/React.createElement("style", null, `
-        * { box-sizing: border-box; }
-        input[type="date"], input[type="time"] { color-scheme: light; }
-        button { font-family: inherit; cursor: pointer; }
-        ::-webkit-scrollbar { display: none; }
-        @keyframes spin{to{transform:rotate(360deg)}}
-      `), /*#__PURE__*/React.createElement("header", {
-    style: styles.header
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: styles.brandEyebrow
-  }, "命理 · 全方位運勢"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      ...styles.brandTitle,
-      fontSize: isWide ? 26 : 22
-    }
-  }, "萬象命盤"))), profiles.length > 0 && /*#__PURE__*/React.createElement("div", {
+  const chartBody = active && bazi ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: styles.profileRow
   }, profiles.map(p => /*#__PURE__*/React.createElement("button", {
     key: p.id,
@@ -2862,20 +3139,7 @@ function BaziApp() {
     size: 13
   }) : /*#__PURE__*/React.createElement(Users, {
     size: 13
-  }), p.name))), error && /*#__PURE__*/React.createElement("div", {
-    style: styles.errorBanner
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      flex: 1
-    }
-  }, error), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setError(""),
-    style: styles.errorDismiss
-  }, /*#__PURE__*/React.createElement(X, {
-    size: 13
-  }))), !active && /*#__PURE__*/React.createElement(EmptyState, {
-    onAdd: () => setShowForm(true)
-  }), active && bazi && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }), p.name))), /*#__PURE__*/React.createElement("div", {
     style: styles.systemBar
   }, [{
     key: "bazi",
@@ -2883,6 +3147,9 @@ function BaziApp() {
   }, {
     key: "astro",
     label: "星座"
+  }, {
+    key: "ziwei",
+    label: "紫微"
   }].map(s => /*#__PURE__*/React.createElement("button", {
     key: s.key,
     onClick: () => {
@@ -3000,7 +3267,366 @@ function BaziApp() {
     cycles: astroCycles,
     birthYear: active.birth.y,
     isWide: isWide
-  })))), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
+  }))), system === "ziwei" && ziwei && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ZiweiCard, {
+    profile: active,
+    ziwei: ziwei,
+    isWide: isWide,
+    onDelete: () => deleteProfile(active.id)
+  }), /*#__PURE__*/React.createElement("div", {
+    style: styles.tabBar
+  }, [{
+    key: "chart",
+    label: "本命盤"
+  }, {
+    key: "decade",
+    label: "大限"
+  }, {
+    key: "year",
+    label: "流年"
+  }].map(t => /*#__PURE__*/React.createElement("button", {
+    key: t.key,
+    onClick: () => setZiweiTab(t.key),
+    style: {
+      ...styles.tabBtn,
+      ...(ziweiTab === t.key ? styles.tabBtnActive : {})
+    }
+  }, t.label))), ziweiTab === "chart" && /*#__PURE__*/React.createElement(ZiweiChartGrid, {
+    ziwei: ziwei,
+    isWide: isWide
+  }), ziweiTab === "decade" && ziweiDecades && /*#__PURE__*/React.createElement(ZiweiDecadeSection, {
+    decades: ziweiDecades,
+    birthYear: active.birth.y,
+    isWide: isWide
+  }), ziweiTab === "year" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(YearSwitcher, {
+    viewYear: viewYear,
+    setViewYear: setViewYear
+  }), (() => {
+    const yb = ((viewYear - 4) % 12 + 12) % 12;
+    const landed = ziwei.palaces.find(p => p.branchIdx === yb);
+    return /*#__PURE__*/React.createElement("div", {
+      style: styles.card
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 700,
+        marginBottom: 6
+      }
+    }, viewYear, "年 · 流年落於「", landed ? landed.name : "", "」"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#8A8272",
+        lineHeight: 1.7
+      }
+    }, "本命", landed ? landed.name : "", "宮內主星：", landed && landed.stars.length ? landed.stars.join("・") : "—", "。流年命宮以該年地支對應之本命宮位判定；流年專屬的四化與細部飛星分析規劃於後續階段補上，此處先提供落宮參考。"));
+  })())))  : /*#__PURE__*/React.createElement(EmptyState, {
+    onAdd: () => setShowForm(true)
+  });
+  const TOOLS = [{
+    key: "yijing",
+    label: "易經",
+    emoji: "☯️",
+    tag: "六爻起卦"
+  }, {
+    key: "tarot",
+    label: "塔羅牌",
+    emoji: "🃏",
+    tag: "單張／三張牌陣"
+  }];
+  const TOPICS = [{
+    key: "work",
+    emoji: "💼",
+    label: "工作"
+  }, {
+    key: "love",
+    emoji: "💕",
+    label: "感情"
+  }, {
+    key: "money",
+    emoji: "💰",
+    label: "財運"
+  }, {
+    key: "health",
+    emoji: "🩺",
+    label: "健康"
+  }, {
+    key: "social",
+    emoji: "🤝",
+    label: "人際"
+  }, {
+    key: "other",
+    emoji: "✨",
+    label: "其他"
+  }];
+  const DURATIONS = [{
+    key: "short",
+    label: "短期",
+    desc: "近期一到三個月內"
+  }, {
+    key: "mid",
+    label: "中期",
+    desc: "半年到一年"
+  }, {
+    key: "long",
+    label: "長期",
+    desc: "一年以上的走向"
+  }];
+  const linkedPerson = divPersonId ? profiles.find(p => p.id === divPersonId) : null;
+  const personRow = (p, onClick) => /*#__PURE__*/React.createElement("div", {
+    key: p.id,
+    style: styles.personListCard,
+    onClick: onClick
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.avatarCircle
+  }, p.isSelf ? /*#__PURE__*/React.createElement(User, {
+    size: 17
+  }) : /*#__PURE__*/React.createElement(Users, {
+    size: 17
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.personListName
+  }, p.name), /*#__PURE__*/React.createElement("div", {
+    style: styles.personListMeta
+  }, `${p.birth.y}年${p.birth.m}月${p.birth.d}日`)), /*#__PURE__*/React.createElement("div", {
+    style: styles.personListChevron
+  }, "›"));
+  const stepDotsEl = activeStep => /*#__PURE__*/React.createElement("div", {
+    style: styles.stepDots
+  }, [0, 1, 2].map(i => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      ...styles.dot,
+      ...(i === activeStep ? styles.dotActive : {})
+    }
+  })));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.page,
+      maxWidth: isWide ? 860 : 480
+    }
+  }, /*#__PURE__*/React.createElement("style", null, `
+        * { box-sizing: border-box; }
+        input[type="date"], input[type="time"] { color-scheme: light; }
+        button { font-family: inherit; cursor: pointer; }
+        ::-webkit-scrollbar { display: none; }
+        @keyframes spin{to{transform:rotate(360deg)}}
+      `), route === "home" ? /*#__PURE__*/React.createElement("header", {
+    style: styles.header
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.brandEyebrow
+  }, "命理 · 占卜 · 全方位運勢"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.brandTitle,
+      fontSize: isWide ? 26 : 22
+    }
+  }, "萬象占卜"))) : /*#__PURE__*/React.createElement("div", {
+    style: styles.topBar
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: goHome,
+    style: styles.homeBackBtn
+  }, /*#__PURE__*/React.createElement(Home, {
+    size: 16
+  }), "回首頁"), /*#__PURE__*/React.createElement("div", {
+    style: styles.routeCrumb
+  }, routeLabel)), error && /*#__PURE__*/React.createElement("div", {
+    style: styles.errorBanner
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setError(""),
+    style: styles.errorDismiss
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 13
+  }))),
+
+  /* ---- 首頁：命盤／占卜 二選一 ---- */
+  route === "home" && /*#__PURE__*/React.createElement("div", {
+    style: styles.bigChoiceWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardM,
+    onClick: () => setRoute("people")
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardIcon
+  }, "📜"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardName
+  }, "命盤"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardSub
+  }, "八字・星座・紫微斗數", /*#__PURE__*/React.createElement("br", null), "建立生辰命盤，查看長期運勢"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardArrow
+  }, "›")), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardZ,
+    onClick: () => setRoute("div-tool")
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardIcon
+  }, "🔮"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardName
+  }, "占卜"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardSub
+  }, "易經・塔羅牌", /*#__PURE__*/React.createElement("br", null), "針對單一問題，即時起卦占卜"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardArrow
+  }, "›"))),
+
+  /* ---- 命盤路徑：人物首頁 ---- */
+  route === "people" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.desc
+  }, "選擇要查看的人物，或新增一位。"), profiles.length === 0 ? /*#__PURE__*/React.createElement(EmptyState, {
+    onAdd: () => setShowForm(true)
+  }) : profiles.map(p => personRow(p, () => {
+    selectProfile(p.id);
+    setRoute("chart");
+  }))),
+
+  /* ---- 命盤路徑：分析頁 ---- */
+  route === "chart" && chartBody,
+
+  /* ---- 占卜路徑：選工具 ---- */
+  route === "div-tool" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.desc
+  }, "選擇想使用的占卜方式。"), /*#__PURE__*/React.createElement("div", {
+    style: styles.toolGrid
+  }, TOOLS.map(t => /*#__PURE__*/React.createElement("div", {
+    key: t.key,
+    style: styles.toolCard,
+    onClick: () => {
+      setDivTool(t.key);
+      setDivLinked(null);
+      setDivPersonId(null);
+      setDivTopic(null);
+      setDivDuration(null);
+      setRoute("div-mode");
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.toolCardIcon
+  }, t.emoji), /*#__PURE__*/React.createElement("div", {
+    style: styles.toolCardName
+  }, t.label), /*#__PURE__*/React.createElement("div", {
+    style: styles.toolCardTag
+  }, t.tag))))),
+
+  /* ---- 占卜路徑：是否連結命盤人物 ---- */
+  route === "div-mode" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.modeTitle
+  }, divTool === "tarot" ? "塔羅牌" : "易經"), /*#__PURE__*/React.createElement("div", {
+    style: styles.desc
+  }, "這次占卜要不要連結一位命盤人物？"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigChoiceWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardM,
+    onClick: () => {
+      setDivLinked(true);
+      setRoute(profiles.length ? "div-person" : "div-topic");
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardIcon
+  }, "🔗"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardName
+  }, "連結命盤人物"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardSub
+  }, "解讀會參考這個人目前的大運／運勢階段，讓內容更貼近他的處境"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardArrow
+  }, "›")), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardZ,
+    onClick: () => {
+      setDivLinked(false);
+      setDivPersonId(null);
+      setRoute("div-topic");
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardIcon
+  }, "✦"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardName
+  }, "快速占卜"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardSub
+  }, "不需要生辰資料，直接起卦，適合臨時想問的問題"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardArrow
+  }, "›"))), /*#__PURE__*/React.createElement("div", {
+    style: styles.hintNote
+  }, "易經、塔羅本身是當下起卦，生辰不影響卦象本身；連結命盤人物提供的是解讀時的背景資訊，不代表結果更準確。")),
+
+  /* ---- 占卜路徑：選人物 ---- */
+  route === "div-person" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.desc
+  }, "選擇要連結的命盤人物。"), profiles.map(p => personRow(p, () => {
+    setDivPersonId(p.id);
+    setRoute("div-topic");
+  }))),
+
+  /* ---- 占卜路徑：選提問類型 ---- */
+  route === "div-topic" && /*#__PURE__*/React.createElement("div", null, stepDotsEl(0), /*#__PURE__*/React.createElement("div", {
+    style: styles.descCenter
+  }, (divTool === "tarot" ? "塔羅牌" : "易經") + " · 這次想問的是關於？", linkedPerson && /*#__PURE__*/React.createElement("div", {
+    style: styles.linkedTag
+  }, "已連結：" + linkedPerson.name)), /*#__PURE__*/React.createElement("div", {
+    style: styles.topicGrid
+  }, TOPICS.map(t => /*#__PURE__*/React.createElement("div", {
+    key: t.key,
+    style: {
+      ...styles.topicChip,
+      ...(divTopic === t.key ? styles.topicChipActive : {})
+    },
+    onClick: () => setDivTopic(t.key)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.topicEmoji
+  }, t.emoji), t.label))), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...styles.primaryBtnFull,
+      ...(divTopic ? {} : styles.btnDisabled)
+    },
+    disabled: !divTopic,
+    onClick: () => setRoute("div-duration")
+  }, "下一步")),
+
+  /* ---- 占卜路徑：選時間長度 ---- */
+  route === "div-duration" && /*#__PURE__*/React.createElement("div", null, stepDotsEl(1), /*#__PURE__*/React.createElement("div", {
+    style: styles.descCenter
+  }, "這件事想問多長的時間範圍？"), /*#__PURE__*/React.createElement("div", {
+    style: styles.durationList
+  }, DURATIONS.map(d => /*#__PURE__*/React.createElement("div", {
+    key: d.key,
+    style: {
+      ...styles.durationOption,
+      ...(divDuration === d.key ? styles.durationOptionActive : {})
+    },
+    onClick: () => setDivDuration(d.key)
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.durationName
+  }, d.label), /*#__PURE__*/React.createElement("div", {
+    style: styles.durationDesc
+  }, d.desc)), /*#__PURE__*/React.createElement("div", {
+    style: styles.durationRadio
+  }, divDuration === d.key ? "●" : "○")))), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...styles.primaryBtnFull,
+      ...(divDuration ? {} : styles.btnDisabled)
+    },
+    disabled: !divDuration,
+    onClick: () => setRoute("div-result")
+  }, "開始起卦")),
+
+  /* ---- 占卜路徑：起卦結果 ---- */
+  route === "div-result" && /*#__PURE__*/React.createElement("div", null, stepDotsEl(2), /*#__PURE__*/React.createElement("div", {
+    style: styles.resultCard
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.resultIcon
+  }, divTool === "tarot" ? "🃏" : "☯️"), /*#__PURE__*/React.createElement("div", {
+    style: styles.resultTitle
+  }, divTool === "tarot" ? "塔羅牌功能開發中" : "易經功能開發中"), /*#__PURE__*/React.createElement("div", {
+    style: styles.resultDesc
+  }, "操作流程已經串接完成——工具、", divLinked ? "已連結命盤人物、" : "快速占卜、", "提問類型、時間範圍都會送進正式的起卦與解讀邏輯，下個開發階段會補上。")), /*#__PURE__*/React.createElement("button", {
+    style: styles.primaryBtnFull,
+    onClick: () => {
+      setDivTool(null);
+      setDivLinked(null);
+      setDivPersonId(null);
+      setDivTopic(null);
+      setDivDuration(null);
+      setRoute("div-tool");
+    }
+  }, "再問一次")), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
     existingHasSelf: profiles.some(p => p.isSelf),
     onCancel: () => setShowForm(false),
     onSave: addProfile,
@@ -3014,12 +3640,12 @@ function BaziApp() {
     style: refreshing ? {
       animation: "spin 1s linear infinite"
     } : undefined
-  })), /*#__PURE__*/React.createElement("button", {
+  })), route === "people" && profiles.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowForm(true),
     style: styles.addFab
   }, /*#__PURE__*/React.createElement(Plus, {
     size: 18
-  }), "新增"));
+  }), "新增命盤"));
 }
 
 /* ---------------- Empty state ---------------- */
@@ -4454,6 +5080,230 @@ function AstroCycleSection({
   }, "說明：每個十年區塊僅取中點年份的行星位置作為代表，實際影響會隨行運逐年變化，此處僅呈現長期基調。"));
 }
 
+/* ---------------- 紫微斗數：命盤摘要卡 ---------------- */
+function ZiweiCard({
+  profile,
+  ziwei,
+  isWide,
+  onDelete
+}) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  const tablets = [{
+    label: "五行局",
+    value: ziwei.bureauInfo.name
+  }, {
+    label: "命宮",
+    value: `${STEMS[ziwei.lifePalaceStemIdx]}${BRANCHES[ziwei.lifePalaceBranchIdx]}`
+  }, {
+    label: "身宮",
+    value: BRANCHES[ziwei.bodyPalaceBranchIdx] + "宮"
+  }, {
+    label: "農曆生日",
+    value: `${ziwei.lunar.isLeapMonth ? "閏" : ""}${ziwei.lunar.lunarMonth}月${ziwei.lunar.lunarDay}日`
+  }];
+  return /*#__PURE__*/React.createElement("div", {
+    style: styles.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#8A8272"
+    }
+  }, profile.name, " · 農曆", ziwei.lunar.lunarYear, "年", ziwei.lunar.isLeapMonth ? "閏" : "", ziwei.lunar.lunarMonth, "月", ziwei.lunar.lunarDay, "日"), !confirmDel ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmDel(true),
+    style: styles.iconBtn
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 14
+  })) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onDelete,
+    style: {
+      ...styles.iconBtn,
+      color: "#c0524a"
+    }
+  }, "刪除"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmDel(false),
+    style: styles.iconBtn
+  }, "取消"))), !ziwei.hasTime && /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiWarnBox
+  }, "此命盤未輸入確切時辰，命宮／身宮以「午時」暫代計算，準確度會受影響；建議補上出生時間以取得正確排盤。"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(4, 1fr)",
+      gap: 8
+    }
+  }, tablets.map((t, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: styles.tablet
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.tabletLabel
+  }, t.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: isWide ? 15 : 13,
+      fontWeight: 700,
+      marginTop: 2
+    }
+  }, t.value)))));
+}
+
+/* ---------------- 紫微斗數：十二宮格局 ---------------- */
+const ZIWEI_GRID_POS = [{
+  r: 4,
+  c: 3
+}, {
+  r: 4,
+  c: 2
+}, {
+  r: 4,
+  c: 1
+}, {
+  r: 3,
+  c: 1
+}, {
+  r: 2,
+  c: 1
+}, {
+  r: 1,
+  c: 1
+}, {
+  r: 1,
+  c: 2
+}, {
+  r: 1,
+  c: 3
+}, {
+  r: 1,
+  c: 4
+}, {
+  r: 2,
+  c: 4
+}, {
+  r: 3,
+  c: 4
+}, {
+  r: 4,
+  c: 4
+}];
+function ZiweiChartGrid({
+  ziwei,
+  isWide
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.ziweiGrid,
+      gridAutoRows: isWide ? 92 : 74
+    }
+  }, ziwei.palaces.map(p => {
+    const pos = ZIWEI_GRID_POS[p.branchIdx];
+    const isSelf = p.branchIdx === ziwei.lifePalaceBranchIdx;
+    return /*#__PURE__*/React.createElement("div", {
+      key: p.branchIdx,
+      style: {
+        ...styles.ziweiPalace,
+        gridRow: pos.r,
+        gridColumn: pos.c,
+        ...(isSelf ? styles.ziweiPalaceSelf : {})
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.ziweiPalaceTop
+    }, /*#__PURE__*/React.createElement("span", {
+      style: styles.ziweiPalaceName
+    }, p.name, p.isBody ? "・身" : ""), /*#__PURE__*/React.createElement("span", {
+      style: styles.ziweiPalaceDz
+    }, STEMS[p.stemIdx], BRANCHES[p.branchIdx])), /*#__PURE__*/React.createElement("div", {
+      style: styles.ziweiPalaceStars
+    }, p.stars.length ? p.stars.join("・") : "—"));
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.ziweiCenter,
+      gridRow: "2 / 4",
+      gridColumn: "2 / 4"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiCenterTitle
+  }, ziwei.bureauInfo.name), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiCenterSub
+  }, "命宮 ", STEMS[ziwei.lifePalaceStemIdx], BRANCHES[ziwei.lifePalaceBranchIdx]), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiCenterSub
+  }, "身宮在", BRANCHES[ziwei.bodyPalaceBranchIdx], "宮")));
+}
+
+/* ---------------- 紫微斗數：大限（十年運限） ---------------- */
+function ZiweiDecadeSection({
+  decades,
+  birthYear,
+  isWide
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#6B6252",
+      lineHeight: 1.7,
+      margin: "0 2px 10px"
+    }
+  }, "大限每十年為一運，起運歲數等於五行局數，第一限即命宮本身；依生年干陰陽與性別決定順、逆行方向，此階段呈現各限落於哪一宮、宮內有哪些主星，作為長期基調參考。"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: isWide ? "grid" : "flex",
+      gridTemplateColumns: isWide ? "repeat(2, 1fr)" : undefined,
+      flexDirection: isWide ? undefined : "column",
+      gap: 8
+    }
+  }, decades.map((d, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      ...styles.fortuneCard,
+      padding: "12px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.dayunPillarBox,
+      borderColor: "#3F6B7A"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#3F6B7A"
+    }
+  }, d.palaceName)), /*#__PURE__*/React.createElement("div", {
+    style: styles.fortuneTextCol
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600
+    }
+  }, d.startAge, "～", d.endAge, " 歲\u3000", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#A79C86",
+      fontWeight: 400,
+      fontSize: 12
+    }
+  }, "(", birthYear + d.startAge - 1, "–", birthYear + d.endAge - 1, ")")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#8A8272"
+    }
+  }, d.stars.length ? d.stars.join("・") : "—")))))));
+}
+
 /* ---------------- 出生地城市座標對照表（用於輸入城市名稱後自動帶入經緯度） ---------------- */
 // 台灣 22 縣市（以縣市治所座標為代表）＋常見海外城市，供出生地自動查找經緯度使用。
 // 找不到的城市仍可展開「手動輸入經緯度」自行輸入。
@@ -5462,6 +6312,379 @@ const styles = {
     padding: 6,
     borderRadius: 8,
     fontSize: 12
+  },
+
+  /* ---- 導覽：回首頁列 ---- */
+  topBar: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16
+  },
+  homeBackBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    background: "#FFFFFF",
+    color: "#b3492b",
+    border: "1.5px solid rgba(179,73,43,0.35)",
+    borderRadius: 999,
+    padding: "9px 16px",
+    fontSize: 13.5,
+    fontWeight: 700,
+    boxShadow: "0 2px 8px rgba(179,73,43,0.12)"
+  },
+  routeCrumb: {
+    fontSize: 11.5,
+    color: "#8A8272",
+    background: "rgba(58,50,38,0.06)",
+    padding: "4px 10px",
+    borderRadius: 999
+  },
+  desc: {
+    fontSize: 13,
+    color: "#8A8272",
+    lineHeight: 1.6,
+    marginBottom: 16
+  },
+  descCenter: {
+    fontSize: 13,
+    color: "#4A4438",
+    lineHeight: 1.6,
+    marginBottom: 16,
+    textAlign: "center",
+    fontWeight: 600
+  },
+  linkedTag: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#3F6B7A",
+    fontWeight: 600
+  },
+
+  /* ---- 首頁：命盤／占卜 二選一 ---- */
+  bigChoiceWrap: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+    marginTop: 8,
+    marginBottom: 12
+  },
+  bigCardBase: {
+    borderRadius: 20,
+    padding: "24px 20px",
+    border: "1px solid rgba(58,50,38,0.10)",
+    position: "relative",
+    overflow: "hidden"
+  },
+  bigCardM: {
+    borderRadius: 20,
+    padding: "24px 20px",
+    border: "1px solid rgba(63,107,122,0.25)",
+    position: "relative",
+    overflow: "hidden",
+    background: "linear-gradient(135deg, rgba(63,107,122,0.12), #FFFFFF 70%)"
+  },
+  bigCardZ: {
+    borderRadius: 20,
+    padding: "24px 20px",
+    border: "1px solid rgba(122,90,63,0.25)",
+    position: "relative",
+    overflow: "hidden",
+    background: "linear-gradient(135deg, rgba(122,90,63,0.12), #FFFFFF 70%)"
+  },
+  bigCardIcon: {
+    fontSize: 28,
+    marginBottom: 8
+  },
+  bigCardName: {
+    fontSize: 17,
+    fontWeight: 800,
+    marginBottom: 4,
+    fontFamily: '"Noto Serif TC","Songti TC",serif'
+  },
+  bigCardSub: {
+    fontSize: 12,
+    color: "#8A8272",
+    lineHeight: 1.6,
+    paddingRight: 26
+  },
+  bigCardArrow: {
+    position: "absolute",
+    right: 20,
+    top: "50%",
+    transform: "translateY(-50%)",
+    fontSize: 20,
+    color: "#8A8272"
+  },
+  modeTitle: {
+    fontSize: 18,
+    fontWeight: 800,
+    fontFamily: '"Noto Serif TC","Songti TC",serif',
+    marginBottom: 4
+  },
+  hintNote: {
+    fontSize: 11.5,
+    color: "#8A8272",
+    background: "rgba(58,50,38,0.05)",
+    borderRadius: 10,
+    padding: "10px 12px",
+    lineHeight: 1.6
+  },
+
+  /* ---- 人物列表（命盤路徑／占卜連結人物） ---- */
+  personListCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.10)",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: "50%",
+    background: "rgba(63,107,122,0.12)",
+    color: "#3F6B7A",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0
+  },
+  personListName: {
+    fontWeight: 700,
+    fontSize: 14.5
+  },
+  personListMeta: {
+    fontSize: 11.5,
+    color: "#8A8272",
+    marginTop: 2
+  },
+  personListChevron: {
+    color: "#8A8272",
+    fontSize: 18
+  },
+
+  /* ---- 占卜：選工具 ---- */
+  toolGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10
+  },
+  toolCard: {
+    borderRadius: 14,
+    padding: "18px 12px",
+    border: "1px solid rgba(122,90,63,0.25)",
+    background: "linear-gradient(135deg, rgba(122,90,63,0.10), #FFFFFF 70%)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    minHeight: 92
+  },
+  toolCardIcon: {
+    fontSize: 22
+  },
+  toolCardName: {
+    fontSize: 13.5,
+    fontWeight: 700
+  },
+  toolCardTag: {
+    fontSize: 10.5,
+    color: "#8A8272"
+  },
+
+  /* ---- 占卜：提問類型 ---- */
+  topicGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+    marginBottom: 20
+  },
+  topicChip: {
+    borderRadius: 12,
+    padding: "16px 10px",
+    border: "1px solid rgba(58,50,38,0.10)",
+    background: "#FFFFFF",
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: 600
+  },
+  topicChipActive: {
+    border: "1.5px solid #7A5A3F",
+    background: "rgba(122,90,63,0.10)",
+    color: "#7A5A3F"
+  },
+  topicEmoji: {
+    fontSize: 20,
+    display: "block",
+    marginBottom: 6
+  },
+
+  /* ---- 占卜：時間長度 ---- */
+  durationList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginBottom: 20
+  },
+  durationOption: {
+    borderRadius: 12,
+    padding: "14px 16px",
+    border: "1px solid rgba(58,50,38,0.10)",
+    background: "#FFFFFF",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  durationOptionActive: {
+    border: "1.5px solid #7A5A3F",
+    background: "rgba(122,90,63,0.10)"
+  },
+  durationName: {
+    fontWeight: 700,
+    fontSize: 13.5
+  },
+  durationDesc: {
+    fontSize: 11,
+    color: "#8A8272",
+    marginTop: 2
+  },
+  durationRadio: {
+    color: "#7A5A3F",
+    fontSize: 15
+  },
+
+  /* ---- 共用：步驟點／主要按鈕 ---- */
+  stepDots: {
+    display: "flex",
+    gap: 6,
+    justifyContent: "center",
+    marginBottom: 18
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    background: "rgba(58,50,38,0.14)"
+  },
+  dotActive: {
+    background: "#7A5A3F",
+    width: 16
+  },
+  primaryBtnFull: {
+    display: "block",
+    width: "100%",
+    background: "#7A5A3F",
+    color: "#fff",
+    border: "none",
+    borderRadius: 12,
+    padding: 14,
+    fontWeight: 700,
+    fontSize: 14
+  },
+  btnDisabled: {
+    opacity: 0.4
+  },
+
+  /* ---- 占卜：起卦結果 ---- */
+  resultCard: {
+    background: "#FFFFFF",
+    border: "1px solid rgba(58,50,38,0.10)",
+    borderRadius: 16,
+    padding: "28px 20px",
+    textAlign: "center",
+    marginBottom: 20
+  },
+  resultIcon: {
+    fontSize: 34,
+    marginBottom: 10
+  },
+  resultTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    marginBottom: 8
+  },
+  resultDesc: {
+    fontSize: 12,
+    color: "#8A8272",
+    lineHeight: 1.7
+  },
+
+  /* ---- 紫微斗數：十二宮格局 ---- */
+  ziweiWarnBox: {
+    fontSize: 11.5,
+    color: "#9A5A2A",
+    background: "rgba(179,73,43,0.08)",
+    border: "1px solid rgba(179,73,43,0.20)",
+    borderRadius: 10,
+    padding: "8px 10px",
+    lineHeight: 1.6,
+    marginBottom: 12
+  },
+  ziweiGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 4,
+    marginTop: 4
+  },
+  ziweiPalace: {
+    border: "1px solid rgba(58,50,38,0.10)",
+    borderRadius: 8,
+    background: "#FFFFFF",
+    padding: "5px 6px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    overflow: "hidden"
+  },
+  ziweiPalaceSelf: {
+    border: "1.5px solid #b3492b",
+    background: "rgba(179,73,43,0.05)"
+  },
+  ziweiPalaceTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline"
+  },
+  ziweiPalaceName: {
+    fontWeight: 700,
+    color: "#3F6B7A",
+    fontSize: 10.5
+  },
+  ziweiPalaceDz: {
+    fontSize: 9.5,
+    color: "#8A8272"
+  },
+  ziweiPalaceStars: {
+    fontSize: 9.5,
+    color: "#2B2620",
+    lineHeight: 1.35,
+    marginTop: 2
+  },
+  ziweiCenter: {
+    borderRadius: 10,
+    background: "rgba(63,107,122,0.08)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    padding: 4,
+    gap: 2
+  },
+  ziweiCenterTitle: {
+    fontFamily: '"Noto Serif TC","Songti TC",serif',
+    fontWeight: 800,
+    fontSize: 14,
+    color: "#3F6B7A"
+  },
+  ziweiCenterSub: {
+    fontSize: 10,
+    color: "#8A8272"
   }
 };
 try {
