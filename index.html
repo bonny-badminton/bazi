@@ -1252,14 +1252,16 @@ const ASTRO_CATEGORY_PAIRS_YEAR = {
 // 每日運勢：月亮是唯一移動夠快（約每日13度）、足以反映逐日變化的天體，
 // 因此每個分類都保留一組月亮相位作為「當日驅動」，另一組維持該分類原本的主題行星以呈現風格與意涵，
 // 避免像流年展望那樣使用木星等慢行星（一個相位可能連續數月不變），導致「今日運勢」看起來一連幾週都沒有變化。
+// 月亮那組相位的「參照點」特意分散在本命太陽／本命上升／本命月亮三者之間（而非只用太陽、上升兩點），
+// 是為了避免「月亮同時跟太陽、上升都形成和諧相位」的日子，讓全部7個分類一起衝到滿分、缺乏區隔。
 const ASTRO_CATEGORY_PAIRS_DAY = {
   overall: [["moon", "sun"], ["sun", "asc"]],
-  wealth: [["venus", "sun"], ["moon", "sun"]],
+  wealth: [["venus", "sun"], ["moon", "moon"]],
   career: [["mars", "sun"], ["moon", "asc"]],
-  romance: [["venus", "moon"], ["moon", "asc"]],
+  romance: [["venus", "moon"], ["moon", "sun"]],
   social: [["mercury", "asc"], ["moon", "asc"]],
   health: [["mars", "sun"], ["moon", "sun"]],
-  study: [["mercury", "sun"], ["moon", "asc"]]
+  study: [["mercury", "sun"], ["moon", "moon"]]
 };
 function buildAstroFortune(natal, transitDateUTC, unit) {
   if (!natal) return null;
@@ -5072,7 +5074,7 @@ function AstroFortuneSection({
         margin: "0 0 8px",
         lineHeight: 1.7
       }
-    }, astroPersonalNote(key, unit, fortune)), !fortune.hasRealAsc && (key === "career" || key === "social" || key === "romance") && /*#__PURE__*/React.createElement("p", {
+    }, astroPersonalNote(key, unit, fortune)), !fortune.hasRealAsc && (unit === "日" ? ["overall", "career", "social"] : ["overall", "career", "romance", "social"]).includes(key) && /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7,
@@ -6032,7 +6034,7 @@ const styles = {
     background: "#FBF8F2",
     color: "#2B2620",
     fontFamily: '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif',
-    padding: "16px 14px 130px",
+    padding: "calc(env(safe-area-inset-top, 0px) + 36px) 14px 130px",
     maxWidth: 480,
     margin: "0 auto"
   },
