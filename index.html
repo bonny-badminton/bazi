@@ -522,7 +522,6 @@ const STEM_YY = ["陽", "陰", "陽", "陰", "陽", "陰", "陽", "陰", "陽", 
 const BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
 const BRANCH_ELEMENT = ["水", "土", "木", "木", "土", "火", "火", "土", "金", "金", "土", "水"];
 const BRANCH_ANIMAL = ["鼠", "牛", "虎", "兔", "龍", "蛇", "馬", "羊", "猴", "雞", "狗", "豬"];
-const BRANCH_HOURS = ["23:00–00:59", "01:00–02:59", "03:00–04:59", "05:00–06:59", "07:00–08:59", "09:00–10:59", "11:00–12:59", "13:00–14:59", "15:00–16:59", "17:00–18:59", "19:00–20:59", "21:00–22:59"];
 const EL = {
   木: {
     color: "#5b8c5a",
@@ -743,11 +742,6 @@ function computeDayun(bazi, isMale) {
     periods
   };
 }
-function pillarLabel(p) {
-  if (!p) return "—";
-  return STEMS[p.stemIdx] + BRANCHES[p.branchIdx];
-}
-
 /* ============================================================
    西洋占星（星座命盤）：使用可選的全域天文函式庫 window.Astronomy
    （獨立版透過 CDN 載入 astronomy-engine 後才會啟用；Claude 預覽環境中
@@ -757,7 +751,6 @@ const ASTRO_AVAILABLE = typeof window !== "undefined" && typeof window.Astronomy
 const ZODIAC_SIGNS = ["牡羊座", "金牛座", "雙子座", "巨蟹座", "獅子座", "處女座", "天秤座", "天蠍座", "射手座", "摩羯座", "水瓶座", "雙魚座"];
 const ZODIAC_SYMBOL = ["♈", "♉", "♊", "♋", "♌", "♍", "♎", "♏", "♐", "♑", "♒", "♓"];
 const ZODIAC_ELEMENT = ["火", "土", "風", "水", "火", "土", "風", "水", "火", "土", "風", "水"];
-const ZODIAC_MODALITY = ["基本", "固定", "變動", "基本", "固定", "變動", "基本", "固定", "變動", "基本", "固定", "變動"];
 const ASTRO_EL = {
   火: {
     color: "#c0524a",
@@ -1246,7 +1239,8 @@ const ASPECT_EFFECT = {
   tense: "彼此角度形成張力，容易感受到壓力或需要多一份協調與耐心",
   neutral: "彼此能量疊加、影響會被放大，好的更好、緊繃的也更緊繃"
 };
-const ASTRO_CATEGORY_PAIRS = {
+// 流年展望：主題行星刻意選用移動較慢的行星（如木星），適合反映數月至一年的長期基調。
+const ASTRO_CATEGORY_PAIRS_YEAR = {
   overall: [["moon", "sun"], ["sun", "asc"]],
   wealth: [["venus", "sun"], ["venus", "moon"]],
   career: [["mars", "sun"], ["jupiter", "asc"]],
@@ -1255,8 +1249,21 @@ const ASTRO_CATEGORY_PAIRS = {
   health: [["mars", "sun"], ["moon", "sun"]],
   study: [["mercury", "sun"], ["jupiter", "moon"]]
 };
+// 每日運勢：月亮是唯一移動夠快（約每日13度）、足以反映逐日變化的天體，
+// 因此每個分類都保留一組月亮相位作為「當日驅動」，另一組維持該分類原本的主題行星以呈現風格與意涵，
+// 避免像流年展望那樣使用木星等慢行星（一個相位可能連續數月不變），導致「今日運勢」看起來一連幾週都沒有變化。
+const ASTRO_CATEGORY_PAIRS_DAY = {
+  overall: [["moon", "sun"], ["sun", "asc"]],
+  wealth: [["venus", "sun"], ["moon", "sun"]],
+  career: [["mars", "sun"], ["moon", "asc"]],
+  romance: [["venus", "moon"], ["moon", "asc"]],
+  social: [["mercury", "asc"], ["moon", "asc"]],
+  health: [["mars", "sun"], ["moon", "sun"]],
+  study: [["mercury", "sun"], ["moon", "asc"]]
+};
 function buildAstroFortune(natal, transitDateUTC, unit) {
   if (!natal) return null;
+  const categoryPairs = unit === "日" ? ASTRO_CATEGORY_PAIRS_DAY : ASTRO_CATEGORY_PAIRS_YEAR;
   const transitKeys = ["sun", "moon", "mercury", "venus", "mars", "jupiter"];
   const transits = {};
   transitKeys.forEach(key => {
@@ -1271,7 +1278,7 @@ function buildAstroFortune(natal, transitDateUTC, unit) {
   const hasRealAsc = !!natal.ascendant;
   const scores = {};
   const details = {};
-  Object.entries(ASTRO_CATEGORY_PAIRS).forEach(([cat, pairs]) => {
+  Object.entries(categoryPairs).forEach(([cat, pairs]) => {
     let score = 3;
     let strongest = null;
     const pairResults = [];
@@ -1506,12 +1513,86 @@ function ziweiStarPosition(bureau, lunarDay) {
   const N = C % 2 === 1 ? Q - C : Q + C;
   return ((1 + N) % 12 + 12) % 12;
 }
+// 天魁天鉞（依年干，坊間通行版本，與紫微斗數全書一致）
+const KUI_YUE_TABLE = {
+  0: [1, 7],
+  1: [0, 8],
+  2: [11, 9],
+  3: [11, 9],
+  4: [1, 7],
+  5: [0, 8],
+  6: [1, 7],
+  7: [6, 2],
+  8: [3, 5],
+  9: [3, 5]
+}; // yearStemIdx -> [天魁branchIdx, 天鉞branchIdx]
+// 祿存（依年干）
+const LUCUN_TABLE = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0]; // yearStemIdx 0..9
+// 天馬（依年支四馬組）
+const TIANMA_BY_YEARBRANCH_GROUP = {
+  0: 2,
+  4: 2,
+  8: 2,
+  // 申子辰 -> 寅
+  2: 8,
+  6: 8,
+  10: 8,
+  // 寅午戌 -> 申
+  5: 11,
+  9: 11,
+  1: 11,
+  // 巳酉丑 -> 亥
+  11: 5,
+  3: 5,
+  7: 5 // 亥卯未 -> 巳
+};
+// 火星／鈴星起點（依年支四組，之後順數至生時）
+const HUOLING_BASE = {
+  2: [1, 3],
+  6: [1, 3],
+  10: [1, 3],
+  // 寅午戌 -> 火丑鈴卯
+  0: [2, 10],
+  4: [2, 10],
+  8: [2, 10],
+  // 申子辰 -> 火寅鈴戌
+  5: [3, 10],
+  9: [3, 10],
+  1: [3, 10],
+  // 巳酉丑 -> 火卯鈴戌
+  11: [9, 10],
+  3: [9, 10],
+  7: [9, 10] // 亥卯未 -> 火酉鈴戌
+};
+// 十干四化（生年四化，標準版本，已交叉比對多方來源）
+const SIHUA_TABLE = [
+  ["廉貞", "破軍", "武曲", "太陽"],
+  // 甲
+  ["天機", "天梁", "紫微", "太陰"],
+  // 乙
+  ["天同", "天機", "文昌", "廉貞"],
+  // 丙
+  ["太陰", "天同", "天機", "巨門"],
+  // 丁
+  ["貪狼", "太陰", "右弼", "天機"],
+  // 戊
+  ["武曲", "貪狼", "天梁", "文曲"],
+  // 己
+  ["太陽", "武曲", "太陰", "天同"],
+  // 庚
+  ["巨門", "太陽", "文曲", "文昌"],
+  // 辛
+  ["天梁", "紫微", "左輔", "武曲"],
+  // 壬
+  ["破軍", "巨門", "太陰", "貪狼"] // 癸
+];
 function computeZiwei(profile) {
   const hasTime = !!profile.hasTime;
   const hourForCalc = hasTime ? profile.birth.h : 12;
   const lunar = computeLunarDate(profile.birth.y, profile.birth.m, profile.birth.d, hourForCalc, hasTime ? profile.birth.min : 0);
   const hourBranchIdx = Math.floor((hourForCalc + 1) % 24 / 2);
   const yearStemIdx = ((lunar.lunarYear - 4) % 10 + 10) % 10;
+  const yearBranchIdx = ((lunar.lunarYear - 4) % 12 + 12) % 12;
   const monthForPalace = lunar.lunarMonth;
   const afterMonthIdx = (1 + monthForPalace) % 12; // 月支宮位（子時基準）
   const lifePalaceBranchIdx = ((afterMonthIdx - hourBranchIdx) % 12 + 12) % 12;
@@ -1523,24 +1604,92 @@ function computeZiwei(profile) {
   const bureauInfo = BUREAU_INFO[bureau];
   const zwPos = ziweiStarPosition(bureau, lunar.lunarDay);
   const tfPos = (4 - zwPos + 12) % 12;
-  const starMap = {};
-  const place = (branchIdx, star) => {
-    (starMap[branchIdx] = starMap[branchIdx] || []).push(star);
+
+  // ---- 十四主星 ----
+  const mainMap = {};
+  const placeMain = (branchIdx, star) => {
+    (mainMap[branchIdx] = mainMap[branchIdx] || []).push(star);
   };
-  place(zwPos, "紫微");
-  place((zwPos - 1 + 12) % 12, "天機");
-  place((zwPos - 3 + 12) % 12, "太陽");
-  place((zwPos - 4 + 12) % 12, "武曲");
-  place((zwPos - 5 + 12) % 12, "天同");
-  place((zwPos - 8 + 12) % 12, "廉貞");
-  place(tfPos, "天府");
-  place((tfPos + 1) % 12, "太陰");
-  place((tfPos + 2) % 12, "貪狼");
-  place((tfPos + 3) % 12, "巨門");
-  place((tfPos + 4) % 12, "天相");
-  place((tfPos + 5) % 12, "天梁");
-  place((tfPos + 6) % 12, "七殺");
-  place((tfPos + 10) % 12, "破軍");
+  placeMain(zwPos, "紫微");
+  placeMain((zwPos - 1 + 12) % 12, "天機");
+  placeMain((zwPos - 3 + 12) % 12, "太陽");
+  placeMain((zwPos - 4 + 12) % 12, "武曲");
+  placeMain((zwPos - 5 + 12) % 12, "天同");
+  placeMain((zwPos - 8 + 12) % 12, "廉貞");
+  placeMain(tfPos, "天府");
+  placeMain((tfPos + 1) % 12, "太陰");
+  placeMain((tfPos + 2) % 12, "貪狼");
+  placeMain((tfPos + 3) % 12, "巨門");
+  placeMain((tfPos + 4) % 12, "天相");
+  placeMain((tfPos + 5) % 12, "天梁");
+  placeMain((tfPos + 6) % 12, "七殺");
+  placeMain((tfPos + 10) % 12, "破軍");
+
+  // ---- 六吉星：左輔右弼（依生月）、文昌文曲（依生時）、天魁天鉞（依年干） ----
+  const luckyMap = {};
+  const placeLucky = (branchIdx, star) => {
+    (luckyMap[branchIdx] = luckyMap[branchIdx] || []).push(star);
+  };
+  placeLucky((4 + (monthForPalace - 1)) % 12, "左輔");
+  placeLucky(((10 - (monthForPalace - 1)) % 12 + 12) % 12, "右弼");
+  placeLucky((4 + hourBranchIdx) % 12, "文曲");
+  placeLucky(((10 - hourBranchIdx) % 12 + 12) % 12, "文昌");
+  const [kuiIdx, yueIdx] = KUI_YUE_TABLE[yearStemIdx];
+  placeLucky(kuiIdx, "天魁");
+  placeLucky(yueIdx, "天鉞");
+  const lucunIdx = LUCUN_TABLE[yearStemIdx];
+  placeLucky(lucunIdx, "祿存");
+  const tianmaIdx = TIANMA_BY_YEARBRANCH_GROUP[yearBranchIdx];
+  placeLucky(tianmaIdx, "天馬");
+
+  // ---- 六煞星：擎羊陀羅（依祿存）、火星鈴星（依年支＋生時）、地空地劫（依生時） ----
+  const harshMap = {};
+  const placeHarsh = (branchIdx, star) => {
+    (harshMap[branchIdx] = harshMap[branchIdx] || []).push(star);
+  };
+  placeHarsh((lucunIdx + 1) % 12, "擎羊");
+  placeHarsh((lucunIdx - 1 + 12) % 12, "陀羅");
+  const [huoBase, lingBase] = HUOLING_BASE[yearBranchIdx];
+  placeHarsh((huoBase + hourBranchIdx) % 12, "火星");
+  placeHarsh((lingBase + hourBranchIdx) % 12, "鈴星");
+  placeHarsh((11 + hourBranchIdx) % 12, "地劫");
+  placeHarsh(((11 - hourBranchIdx) % 12 + 12) % 12, "地空");
+
+  // ---- 生年四化：找出祿權科忌四顆星分別落在哪個宮位 ----
+  const [luStar, quanStar, keStar, jiStar] = SIHUA_TABLE[yearStemIdx];
+  const findStarBranch = name => {
+    for (let b = 0; b < 12; b++) {
+      if ((mainMap[b] || []).includes(name) || (luckyMap[b] || []).includes(name)) return b;
+    }
+    return null;
+  };
+  const sihua = {
+    祿: {
+      star: luStar,
+      branchIdx: findStarBranch(luStar)
+    },
+    權: {
+      star: quanStar,
+      branchIdx: findStarBranch(quanStar)
+    },
+    科: {
+      star: keStar,
+      branchIdx: findStarBranch(keStar)
+    },
+    忌: {
+      star: jiStar,
+      branchIdx: findStarBranch(jiStar)
+    }
+  };
+  const sihuaByBranch = {};
+  Object.entries(sihua).forEach(([tag, info]) => {
+    if (info.branchIdx == null) return;
+    (sihuaByBranch[info.branchIdx] = sihuaByBranch[info.branchIdx] || []).push({
+      star: info.star,
+      tag
+    });
+  });
+
   const palaces = PALACE_NAMES.map((name, i) => {
     const branchIdx = ((lifePalaceBranchIdx - i) % 12 + 12) % 12;
     const offsetFromYin = (branchIdx - 2 + 12) % 12;
@@ -1549,7 +1698,10 @@ function computeZiwei(profile) {
       name,
       branchIdx,
       stemIdx,
-      stars: starMap[branchIdx] || [],
+      stars: mainMap[branchIdx] || [],
+      luckyStars: luckyMap[branchIdx] || [],
+      harshStars: harshMap[branchIdx] || [],
+      sihuaTags: sihuaByBranch[branchIdx] || [],
       isBody: branchIdx === bodyPalaceBranchIdx
     };
   });
@@ -1562,6 +1714,7 @@ function computeZiwei(profile) {
     bodyPalaceBranchIdx,
     bureau,
     bureauInfo,
+    sihua,
     palaces
   };
 }
@@ -2678,7 +2831,9 @@ const ASTRO_ADVICE = {
 };
 
 // 展開明細最上方的「原理說明」：解釋這個面向在占星學上主要參考哪些行星與相位，屬於固定的教育性內容。
-const ASTRO_CATEGORY_DEEPDIVE = {
+// 流年展望維持原本以主題行星（含木星等慢行星）為主的說明；每日運勢則改為說明「月亮＋主題行星」的組合，
+// 與 ASTRO_CATEGORY_PAIRS_DAY／_YEAR 的實際配對保持一致，避免文字描述與實際採用的相位對不上。
+const ASTRO_CATEGORY_DEEPDIVE_YEAR = {
   overall: "整體運勢主要參考月亮、太陽與上升點彼此之間的相位關係——月亮代表你的情緒與日常感受，太陽代表核心自我與能量展現，上升點則代表你與外在世界互動的方式。當行運中的月亮、太陽與本命的太陽、上升點形成和諧相位（如六分相、三分相），通常代表運勢較為順遂；形成張力相位（如四分相、對分相）則容易感受到壓力或步調被打亂。",
   wealth: "財運主要參考金星（代表價值觀、資源與吸引力）與你本命太陽、月亮之間的相位關係。金星形成和諧相位時，財務上較容易有進帳或合作機會；形成張力相位時，則容易有非預期的開銷或判斷失準的風險，理財上宜更謹慎。",
   career: "工作運主要參考火星（代表行動力與衝勁）與太陽的相位，以及木星（代表擴張與機會）與上升點的相位。火星和諧相位有助推進計畫、展現行動力；木星和諧相位則利於獲得機會與貴人扶持。若形成張力相位，工作上容易遇到阻力或步調生變。",
@@ -2687,15 +2842,12 @@ const ASTRO_CATEGORY_DEEPDIVE = {
   health: "健康運主要參考火星（代表體力與行動力）與太陽、月亮與太陽之間的相位關係。火星和諧相位時精神體力較為旺盛；形成張力相位時則容易感到緊繃或耗損，建議多加休息、避免硬撐。",
   study: "學業貴人運主要參考水星（代表思考與學習）與太陽的相位，以及木星（代表擴張與機會）與月亮的相位。水星和諧相位有助思路清晰、吸收力佳；木星和諧相位則利於獲得貴人提攜、把握進修考核的機會。"
 };
-
-// 行星的一般占星意涵（用於組成「這天實際發生什麼」的動態說明）
-const PLANET_THEME = {
-  sun: "自我展現與核心能量",
-  moon: "情緒起伏與內在感受",
-  mercury: "溝通表達與資訊思考",
-  venus: "人際魅力與情感連結",
-  mars: "行動力與衝勁",
-  jupiter: "擴張機會與樂觀能量"
+const ASTRO_CATEGORY_DEEPDIVE_DAY = {
+  ...ASTRO_CATEGORY_DEEPDIVE_YEAR,
+  wealth: "財運主要參考金星（代表價值觀、資源與吸引力）與太陽的相位，並加入移動速度最快的月亮與太陽的相位，讓每日的財務判斷有逐日變化的細節。金星形成和諧相位時，財務上較容易有進帳或合作機會；形成張力相位時，則容易有非預期的開銷或判斷失準的風險，理財上宜更謹慎。",
+  career: "工作運主要參考火星（代表行動力與衝勁）與太陽的相位，並加入移動速度最快的月亮與上升點的相位，讓每日的職場氣氛有逐日變化的細節。火星和諧相位有助推進計畫、展現行動力；月亮相位則反映當天的臨場情緒與應對狀態。若形成張力相位，工作上容易遇到阻力或步調生變。",
+  romance: "桃花運主要參考金星（代表情感吸引力）與你本命月亮之間的相位，並加入移動速度最快的月亮與上升點的相位，讓每日的情感氛圍有逐日變化的細節。金星形成和諧相位時，魅力與吸引力較為突出，適合主動經營感情；形成張力相位時，感情面則容易有情緒起伏或誤會，互動上需要更多耐心。",
+  study: "學業貴人運主要參考水星（代表思考與學習）與太陽的相位，並加入移動速度最快的月亮與上升點的相位，讓每日的學習狀態有逐日變化的細節。水星和諧相位有助思路清晰、吸收力佳；月亮相位則反映當天的專注度與臨場表現。"
 };
 
 // 十二星座的特質關鍵字（用於描述行運行星「行經哪個星座」帶來的氛圍）
@@ -2739,16 +2891,6 @@ const ASTRO_CATEGORY_ACTION = {
     neutral: unit => `學習上這${unit}的專注度會被放大，建議挑選安靜的環境學習。`
   }
 };
-const ASTRO_CATEGORY_LABEL = {
-  overall: "整體運勢",
-  wealth: "財運",
-  career: "工作運",
-  romance: "桃花運",
-  social: "人際關係",
-  health: "健康運",
-  study: "學業貴人運"
-};
-
 // 收合狀態下的一句話摘要，只用淺顯的分數評語，技術性的行星／相位說明移到展開後呈現
 function astroSimpleSummary(key, score) {
   return ASTRO_SCORE_TONE[key][score - 1];
@@ -3290,10 +3432,20 @@ function BaziApp() {
       ...styles.tabBtn,
       ...(ziweiTab === t.key ? styles.tabBtnActive : {})
     }
-  }, t.label))), ziweiTab === "chart" && /*#__PURE__*/React.createElement(ZiweiChartGrid, {
+  }, t.label))), ziweiTab === "chart" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ZiweiChartGrid, {
     ziwei: ziwei,
     isWide: isWide
-  }), ziweiTab === "decade" && ziweiDecades && /*#__PURE__*/React.createElement(ZiweiDecadeSection, {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiLegend
+  }, /*#__PURE__*/React.createElement("span", null, "深色：十四主星"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#3F6B7A"
+    }
+  }, "藍色：六吉星＋祿存天馬"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#B14338"
+    }
+  }, "紅色：六煞星"), /*#__PURE__*/React.createElement("span", null, "[祿/權/科/忌]：生年四化落點"))), ziweiTab === "decade" && ziweiDecades && /*#__PURE__*/React.createElement(ZiweiDecadeSection, {
     decades: ziweiDecades,
     birthYear: active.birth.y,
     isWide: isWide
@@ -4915,7 +5067,7 @@ function AstroFortuneSection({
         margin: "0 0 8px",
         lineHeight: 1.7
       }
-    }, ASTRO_CATEGORY_DEEPDIVE[key]), /*#__PURE__*/React.createElement("p", {
+    }, (unit === "日" ? ASTRO_CATEGORY_DEEPDIVE_DAY : ASTRO_CATEGORY_DEEPDIVE_YEAR)[key]), /*#__PURE__*/React.createElement("p", {
       style: {
         margin: "0 0 8px",
         lineHeight: 1.7
@@ -5198,10 +5350,14 @@ function ZiweiChartGrid({
   ziwei,
   isWide
 }) {
+  const sihuaSuffix = (name, tags) => {
+    const hit = tags.find(t => t.star === name);
+    return hit ? `[${hit.tag}]` : "";
+  };
   return /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.ziweiGrid,
-      gridAutoRows: isWide ? 92 : 74
+      gridAutoRows: isWide ? 110 : 92
     }
   }, ziwei.palaces.map(p => {
     const pos = ZIWEI_GRID_POS[p.branchIdx];
@@ -5222,7 +5378,11 @@ function ZiweiChartGrid({
       style: styles.ziweiPalaceDz
     }, STEMS[p.stemIdx], BRANCHES[p.branchIdx])), /*#__PURE__*/React.createElement("div", {
       style: styles.ziweiPalaceStars
-    }, p.stars.length ? p.stars.join("・") : "—"));
+    }, p.stars.length ? p.stars.map(s => s + sihuaSuffix(s, p.sihuaTags)).join("・") : "—"), p.luckyStars.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: styles.ziweiPalaceLucky
+    }, p.luckyStars.map(s => s + sihuaSuffix(s, p.sihuaTags)).join("・")), p.harshStars.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: styles.ziweiPalaceHarsh
+    }, p.harshStars.join("・")));
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.ziweiCenter,
@@ -5235,7 +5395,13 @@ function ZiweiChartGrid({
     style: styles.ziweiCenterSub
   }, "命宮 ", STEMS[ziwei.lifePalaceStemIdx], BRANCHES[ziwei.lifePalaceBranchIdx]), /*#__PURE__*/React.createElement("div", {
     style: styles.ziweiCenterSub
-  }, "身宮在", BRANCHES[ziwei.bodyPalaceBranchIdx], "宮")));
+  }, "身宮在", BRANCHES[ziwei.bodyPalaceBranchIdx], "宮"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.ziweiCenterSub,
+      marginTop: 4,
+      fontSize: 9
+    }
+  }, "[祿]", ziwei.sihua.祿.star, "・[權]", ziwei.sihua.權.star, "・[科]", ziwei.sihua.科.star, "・[忌]", ziwei.sihua.忌.star)));
 }
 
 /* ---------------- 紫微斗數：大限（十年運限） ---------------- */
@@ -6665,6 +6831,18 @@ const styles = {
     lineHeight: 1.35,
     marginTop: 2
   },
+  ziweiPalaceLucky: {
+    fontSize: 8.5,
+    color: "#3F6B7A",
+    lineHeight: 1.3,
+    marginTop: 1
+  },
+  ziweiPalaceHarsh: {
+    fontSize: 8.5,
+    color: "#B14338",
+    lineHeight: 1.3,
+    marginTop: 1
+  },
   ziweiCenter: {
     borderRadius: 10,
     background: "rgba(63,107,122,0.08)",
@@ -6685,6 +6863,17 @@ const styles = {
   ziweiCenterSub: {
     fontSize: 10,
     color: "#8A8272"
+  },
+  ziweiLegend: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "6px 12px",
+    fontSize: 10.5,
+    color: "#8A8272",
+    marginTop: 10,
+    padding: "8px 10px",
+    background: "rgba(58,50,38,0.04)",
+    borderRadius: 10
   }
 };
 try {
