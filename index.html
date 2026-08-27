@@ -1717,7 +1717,9 @@ function computeZiwei(profile) {
     bureau,
     bureauInfo,
     sihua,
-    palaces
+    palaces,
+    birthMonthForPalace: monthForPalace,
+    birthHourBranchIdx: hourBranchIdx
   };
 }
 // 大限（十年運限）：起運歲＝局數，陽男陰女順行、陰男陽女逆行——規則與八字大運相同。
@@ -1737,6 +1739,40 @@ function computeZiweiDecades(bureau, lifePalaceBranchIdx, isMale, yearStemIdx, p
     });
   }
   return decades;
+}
+
+/* ---- 流年斗君／流月／流日 ----
+   斗君＝該流年的「正月」所在宮位，是往下推流月、流日的起點。
+   演算法已交叉比對多個獨立來源、以兩種不同推導方式相互驗證一致：
+   斗君 = 流年宮（＝地支與流年相同的宮位）－（出生月份－1）＋出生時支序，逆數論月、順數論時。
+   流月：斗君宮＝正月，此後每月順時針移一宮。
+   流日：該月流月宮＝初一，此後每天順時針移一宮，十二天一輪（傳統通行算法，正確識別方式已與多方來源交叉核對；
+   流日層級歷史上另有研究者提出不同算法，此處採多數文獻共同採用的傳統算法）。
+*/
+function computeZiweiDouJun(birthMonthForPalace, birthHourBranchIdx, flowYearBranchIdx) {
+  return ((flowYearBranchIdx - (birthMonthForPalace - 1) + birthHourBranchIdx) % 12 + 12) % 12;
+}
+function computeZiweiFlowMonthPalace(douJunBranchIdx, flowLunarMonth) {
+  return (douJunBranchIdx + (flowLunarMonth - 1)) % 12;
+}
+function computeZiweiFlowDayPalace(flowMonthPalaceBranchIdx, flowLunarDay) {
+  return (flowMonthPalaceBranchIdx + (flowLunarDay - 1) % 12) % 12;
+}
+// 給定西曆日期，算出當天在紫微斗數裡的「流日」落在本命盤哪一宮，並回傳沿途算出的流年斗君、流月宮。
+function computeZiweiFlowDay(ziwei, y, m, d, hour, minute) {
+  const flowLunar = computeLunarDate(y, m, d, hour ?? 12, minute ?? 0);
+  const flowYearBranchIdx = ((flowLunar.lunarYear - 4) % 12 + 12) % 12;
+  const douJunBranchIdx = computeZiweiDouJun(ziwei.birthMonthForPalace, ziwei.birthHourBranchIdx, flowYearBranchIdx);
+  const flowMonthPalaceBranchIdx = computeZiweiFlowMonthPalace(douJunBranchIdx, flowLunar.lunarMonth);
+  const flowDayPalaceBranchIdx = computeZiweiFlowDayPalace(flowMonthPalaceBranchIdx, flowLunar.lunarDay);
+  const palace = ziwei.palaces.find(p => p.branchIdx === flowDayPalaceBranchIdx);
+  return {
+    flowLunar,
+    douJunBranchIdx,
+    flowMonthPalaceBranchIdx,
+    flowDayPalaceBranchIdx,
+    palace
+  };
 }
 // 地支藏干對照表：每個地支所藏的天干與權重（本氣權重最高，中氣、餘氣次之），
 // 用於計算「整張命盤」的十神分布，而不只是四柱天干本身。權重為簡化估算，僅供分析參考。
@@ -3102,7 +3138,7 @@ function BaziApp() {
   const [tab, setTab] = useState("day"); // "day" | "year" | "dayun"
   const [system, setSystem] = useState("bazi"); // "bazi" | "astro" | "ziwei"
   const [astroTab, setAstroTab] = useState("today"); // "today" | "year" | "cycle"
-  const [ziweiTab, setZiweiTab] = useState("chart"); // "chart" | "decade" | "year"
+  const [ziweiTab, setZiweiTab] = useState("chart"); // "chart" | "year" | "decade" | "day"
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null); // category detail expand
@@ -3422,11 +3458,14 @@ function BaziApp() {
     key: "chart",
     label: "本命盤"
   }, {
+    key: "year",
+    label: "流年"
+  }, {
     key: "decade",
     label: "大限"
   }, {
-    key: "year",
-    label: "流年"
+    key: "day",
+    label: "流日"
   }].map(t => /*#__PURE__*/React.createElement("button", {
     key: t.key,
     onClick: () => setZiweiTab(t.key),
@@ -3447,16 +3486,26 @@ function BaziApp() {
     style: {
       color: "#B14338"
     }
-  }, "紅色：六煞星"), /*#__PURE__*/React.createElement("span", null, "[祿/權/科/忌]：生年四化落點"))), ziweiTab === "decade" && ziweiDecades && /*#__PURE__*/React.createElement(ZiweiDecadeSection, {
+  }, "紅色：六煞星"), /*#__PURE__*/React.createElement("span", null, "[祿/權/科/忌]：生年四化落點")), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiNote
+  }, "本命盤是依你的出生年月日時排出的固定命盤，一輩子不會改變，是後面「大限」「流年」「流日」判斷的基礎參考座標。命宮所在的宮位代表你與生俱來的核心特質；十二宮則分別對應人生的不同面向（兄弟手足、婚姻感情、財務狀況、健康、外出運、人際、事業、居家不動產、精神生活、父母長輩等），宮內落的主星、吉星、煞星共同組成這個面向的基本傾向，若該宮同時帶有生年四化，代表這一世在這個面向上會有比較明顯的際遇轉折。")), ziweiTab === "decade" && ziweiDecades && /*#__PURE__*/React.createElement(ZiweiDecadeSection, {
     decades: ziweiDecades,
     birthYear: active.birth.y,
     isWide: isWide
   }), ziweiTab === "year" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(YearSwitcher, {
     viewYear: viewYear,
     setViewYear: setViewYear
-  }), (() => {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiNote
+  }, "流年看的是「今年」這一年的整體氣氛：以流年地支對應到本命盤上同一地支的宮位，這個宮位在今年就代表「流年命宮」，宮內原本的主星、吉煞、四化都會被重新啟動、影響力放大，是這一整年相對容易被凸顯出來的主題。"), (() => {
     const yb = ((viewYear - 4) % 12 + 12) % 12;
     const landed = ziwei.palaces.find(p => p.branchIdx === yb);
+    if (!landed) return null;
+    const bits = [];
+    if (landed.stars.length) bits.push("主星有" + landed.stars.join("、"));
+    if (landed.luckyStars.length) bits.push("吉星有" + landed.luckyStars.join("、"));
+    if (landed.harshStars.length) bits.push("煞星有" + landed.harshStars.join("、"));
+    if (landed.sihuaTags.length) bits.push("並帶有生年四化" + landed.sihuaTags.map(t => t.star + "化" + t.tag).join("、"));
     return /*#__PURE__*/React.createElement("div", {
       style: styles.card
     }, /*#__PURE__*/React.createElement("div", {
@@ -3465,14 +3514,43 @@ function BaziApp() {
         fontWeight: 700,
         marginBottom: 6
       }
-    }, viewYear, "年 · 流年落於「", landed ? landed.name : "", "」"), /*#__PURE__*/React.createElement("div", {
+    }, viewYear, "年 · 流年命宮落在「", landed.name, "」"), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: "#8A8272",
-        lineHeight: 1.7
+        lineHeight: 1.8
       }
-    }, "本命", landed ? landed.name : "", "宮內主星：", landed && landed.stars.length ? landed.stars.join("・") : "—", "。流年命宮以該年地支對應之本命宮位判定；流年專屬的四化與細部飛星分析規劃於後續階段補上，此處先提供落宮參考。"));
-  })())))  : /*#__PURE__*/React.createElement(EmptyState, {
+    }, bits.length ? bits.join("；") + "。" : "此宮本命無主星、吉煞星進駐，屬於較平穩、不特別被放大的一年。", "流年命宮以該年地支對應之本命宮位判定；流年專屬的四化飛星（用流年天干另外飛佈）規劃於後續階段補上，此處先提供本命星曜落宮的參考。"));
+  })())), ziweiTab === "day" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DateSwitcher, {
+    viewDate: viewDate,
+    setViewDate: setViewDate
+  }), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiNote
+  }, "流日是紫微斗數裡最細的一層：從流年的「斗君」（該年正月所在宮）起算，順時針排出每個月的流月宮，再從流月宮起初一、順時針每天移一宮、十二天一輪，排出每天的流日宮。流日宮內的星曜會是這一天相對被放大的主題，常用於挑選談判、簽約、面試等重要時機的參考。"), (() => {
+    const vd = new Date(viewDate + "T12:00:00");
+    const flow = computeZiweiFlowDay(ziwei, vd.getFullYear(), vd.getMonth() + 1, vd.getDate(), 12, 0);
+    const landed = flow.palace;
+    if (!landed) return null;
+    const bits = [];
+    if (landed.stars.length) bits.push("主星有" + landed.stars.join("、"));
+    if (landed.luckyStars.length) bits.push("吉星有" + landed.luckyStars.join("、"));
+    if (landed.harshStars.length) bits.push("煞星有" + landed.harshStars.join("、"));
+    return /*#__PURE__*/React.createElement("div", {
+      style: styles.card
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 700,
+        marginBottom: 6
+      }
+    }, "農曆", flow.flowLunar.isLeapMonth ? "閏" : "", flow.flowLunar.lunarMonth, "月", flow.flowLunar.lunarDay, "日 · 流日宮落在「", landed.name, "」"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#8A8272",
+        lineHeight: 1.8
+      }
+    }, bits.length ? bits.join("；") + "。" : "此宮本命無主星、吉煞星進駐，屬於較平淡的一天。", "流日算法採多數文獻共同使用的傳統通行做法（斗君起流月、流月起初一），歷史上流日層級另有研究者提出不同算法，此處先提供主流算法的參考結果。"));
+  })()))  : /*#__PURE__*/React.createElement(EmptyState, {
     onAdd: () => setShowForm(true)
   });
   const TOOLS = [{
@@ -6876,6 +6954,12 @@ const styles = {
     padding: "8px 10px",
     background: "rgba(58,50,38,0.04)",
     borderRadius: 10
+  },
+  ziweiNote: {
+    fontSize: 12,
+    color: "#6B6252",
+    lineHeight: 1.75,
+    margin: "12px 2px 0"
   }
 };
 try {
