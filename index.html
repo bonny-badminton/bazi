@@ -1774,6 +1774,219 @@ function computeZiweiFlowDay(ziwei, y, m, d, hour, minute) {
     palace
   };
 }
+
+/* ---------------- 紫微斗數：星曜解讀與運勢評分（本命深度解讀＋流日/流年/大限共用） ----------------
+   評分方式：每顆星依傳統性質給予一個簡化的正負權重（吉星/廟旺格局偏正、煞星/耗星偏負），
+   加總落在該宮位的所有星曜權重＋生年四化調整後，換算成 1–5 分。這是為了與八字、星座已有的
+   「量化評分」呈現方式一致而做的簡化模型，星曜本身的吉凶其實會因三方四正組合、廟旺陷弱等
+   更精細的規則而有出入，這裡僅取星曜本質的通論，屬於簡化參考，並非精密論命。 */
+const MAIN_STAR_INFO = {
+  紫微: {
+    weight: 2,
+    trait: "天生具領袖氣質與自尊心，重視名譽地位，遇事沉穩大氣，但有時較主觀，需要旁人輔佐才能發揮最大格局"
+  },
+  天機: {
+    weight: 0.3,
+    trait: "頭腦靈活、善於策劃應變，興趣廣泛但容易多想、缺乏定性，適合需要隨機應變的工作"
+  },
+  太陽: {
+    weight: 1.3,
+    trait: "個性光明磊落、熱心公益，具照顧他人與領導的特質，但容易為他人奔波勞碌、忽略自身需求"
+  },
+  武曲: {
+    weight: 1,
+    trait: "意志堅定、做事果決，對數字與財務敏感，是典型的實幹家，但個性較剛硬、不擅表達情感"
+  },
+  天同: {
+    weight: 1.3,
+    trait: "個性溫和知足、隨遇而安，重視生活品質與人際和諧，但有時稍嫌被動、缺乏衝勁"
+  },
+  廉貞: {
+    weight: -0.3,
+    trait: "個性複雜多面，外表沉穩內心多變，做事積極有企圖心，但情緒起伏較大、人際上容易招惹是非"
+  },
+  天府: {
+    weight: 1.8,
+    trait: "穩重厚道、善於理財與統籌資源，責任感強，是可靠的管理者性格，但有時較保守、不喜冒險"
+  },
+  太陰: {
+    weight: 1.3,
+    trait: "心思細膩、感性體貼，重視家庭與內在生活品質，直覺敏銳，但情緒容易隨環境起伏"
+  },
+  貪狼: {
+    weight: 0.2,
+    trait: "多才多藝、善於交際應酬，慾望與企圖心強，適應力極佳，但容易見異思遷、需要專注力"
+  },
+  巨門: {
+    weight: -0.8,
+    trait: "口才犀利、善於分析與辯論，觀察力敏銳，但話直心快，容易招惹口舌是非，需注意言詞分寸"
+  },
+  天相: {
+    weight: 1.3,
+    trait: "忠厚老實、做事謹慎細心，重視原則與公平，是很好的輔佐者性格，但有時較缺乏主見"
+  },
+  天梁: {
+    weight: 1.3,
+    trait: "穩重可靠、樂於照顧他人，具長輩緣與貴人運，處事有原則，但有時較固執、不易妥協"
+  },
+  七殺: {
+    weight: -0.3,
+    trait: "個性剛毅果決、行動力強，勇於面對挑戰與變動，屬先苦後甘型，但情緒容易急躁、不喜受拘束"
+  },
+  破軍: {
+    weight: -0.8,
+    trait: "勇於開創、不畏變動與挑戰，具突破現狀的魄力，但性格較不穩定，人生起伏也相對較大"
+  }
+};
+const LUCKY_STAR_INFO = {
+  左輔: {
+    weight: 0.7,
+    trait: "有貴人輔佐，人際上容易得到助力"
+  },
+  右弼: {
+    weight: 0.7,
+    trait: "有貴人輔佐，人際上容易得到助力"
+  },
+  文昌: {
+    weight: 0.7,
+    trait: "利文書、考試與學習表現"
+  },
+  文曲: {
+    weight: 0.7,
+    trait: "利文書、才藝與口語表達"
+  },
+  天魁: {
+    weight: 0.7,
+    trait: "利提攜與貴人運，容易遇到願意拉你一把的人"
+  },
+  天鉞: {
+    weight: 0.7,
+    trait: "利提攜與貴人運，容易遇到願意拉你一把的人"
+  },
+  祿存: {
+    weight: 1,
+    trait: "財源較穩定，利守成"
+  },
+  天馬: {
+    weight: 0.4,
+    trait: "利變動與外出發展，行動力提升"
+  }
+};
+const HARSH_STAR_INFO = {
+  擎羊: {
+    weight: -1.1,
+    trait: "個性剛烈易衝動，容易招惹紛爭或意外損傷"
+  },
+  陀羅: {
+    weight: -1,
+    trait: "做事容易拖延反覆，需留意糾纏不清的困擾"
+  },
+  火星: {
+    weight: -0.9,
+    trait: "性急躁進，容易因衝動行事招致波折"
+  },
+  鈴星: {
+    weight: -0.9,
+    trait: "個性悶而易怒，壓力累積後容易爆發"
+  },
+  地空: {
+    weight: -1.1,
+    trait: "想法天馬行空，規劃容易落空，宜務實看待"
+  },
+  地劫: {
+    weight: -1.1,
+    trait: "破財或計畫落空的機率較高，需謹慎理財"
+  }
+};
+const SIHUA_WEIGHT = {
+  祿: 1.5,
+  權: 1,
+  科: 0.7,
+  忌: -2
+};
+// 流日／流年／大限運勢分析所使用的七個面向，各自對應要看哪一個宮位（依「流年十二宮」重新命名後的宮位）。
+const ZIWEI_FORTUNE_CATEGORY_PALACE = {
+  overall: "命宮",
+  wealth: "財帛",
+  career: "官祿",
+  romance: "夫妻",
+  social: "交友",
+  health: "疾厄",
+  study: "父母"
+};
+// 給定一個「起算宮位」（流年命宮／流日命宮／大限命宮所在地支），把本命盤十二宮的星曜
+// 重新以此為命宮起點排列成一組新的十二宮（宮名重新分配，星曜本身不會移動，只是換了一批標籤）。
+function buildZiweiFlowPalaces(anchorBranchIdx, ziwei) {
+  return PALACE_NAMES.map((name, i) => {
+    const branchIdx = ((anchorBranchIdx - i) % 12 + 12) % 12;
+    const natal = ziwei.palaces.find(p => p.branchIdx === branchIdx);
+    return {
+      name,
+      branchIdx,
+      stars: natal ? natal.stars : [],
+      luckyStars: natal ? natal.luckyStars : [],
+      harshStars: natal ? natal.harshStars : [],
+      sihuaTags: natal ? natal.sihuaTags : []
+    };
+  });
+}
+function ziweiPalaceScore(palace) {
+  if (!palace) return {
+    score: 3,
+    weight: 0
+  };
+  let w = 0;
+  palace.stars.forEach(s => w += MAIN_STAR_INFO[s].weight);
+  palace.luckyStars.forEach(s => w += LUCKY_STAR_INFO[s].weight);
+  palace.harshStars.forEach(s => w += HARSH_STAR_INFO[s].weight);
+  palace.sihuaTags.forEach(t => w += SIHUA_WEIGHT[t.tag] || 0);
+  const score = Math.max(1, Math.min(5, Math.round(3 + w / 2)));
+  return {
+    score,
+    weight: w
+  };
+}
+// 依「起算宮位」算出七個面向的分數（用於流日／流年／大限的運勢卡片）。
+function computeZiweiFortune(ziwei, anchorBranchIdx) {
+  const flowPalaces = buildZiweiFlowPalaces(anchorBranchIdx, ziwei);
+  const scores = {};
+  const details = {};
+  Object.entries(ZIWEI_FORTUNE_CATEGORY_PALACE).forEach(([cat, palaceName]) => {
+    const p = flowPalaces.find(fp => fp.name === palaceName);
+    const {
+      score
+    } = ziweiPalaceScore(p);
+    scores[cat] = score;
+    details[cat] = {
+      palace: p
+    };
+  });
+  return {
+    flowPalaces,
+    scores,
+    details
+  };
+}
+// 把一個宮位內的星曜組合，轉成一段白話敘述文字（本命深度解讀使用）。
+function ziweiPalaceNarrative(palace) {
+  if (!palace) return "";
+  const parts = [];
+  if (palace.stars.length) {
+    parts.push(palace.stars.map(s => `「${s}」－${MAIN_STAR_INFO[s].trait}`).join("；"));
+  } else {
+    parts.push("此宮本命無主星進駐（俗稱「空宮」），傳統上會參考對宮（遷移方向）的星曜來輔助判斷，這個面向的傾向相對較不固定、彈性也較大");
+  }
+  if (palace.luckyStars.length) {
+    parts.push("同宮並有" + palace.luckyStars.join("、") + "，" + [...new Set(palace.luckyStars.map(s => LUCKY_STAR_INFO[s].trait))].join("；"));
+  }
+  if (palace.harshStars.length) {
+    parts.push("同宮亦有" + palace.harshStars.join("、") + "，需留意" + [...new Set(palace.harshStars.map(s => HARSH_STAR_INFO[s].trait))].join("；"));
+  }
+  if (palace.sihuaTags.length) {
+    parts.push("此宮並帶有生年四化「" + palace.sihuaTags.map(t => t.star + "化" + t.tag).join("、") + "」，代表這個面向在你命盤中屬於相對被強調、際遇轉折較明顯的部分");
+  }
+  return parts.join("；") + "。";
+}
 // 地支藏干對照表：每個地支所藏的天干與權重（本氣權重最高，中氣、餘氣次之），
 // 用於計算「整張命盤」的十神分布，而不只是四柱天干本身。權重為簡化估算，僅供分析參考。
 const BRANCH_HIDDEN_STEMS = [
@@ -3138,7 +3351,8 @@ function BaziApp() {
   const [tab, setTab] = useState("day"); // "day" | "year" | "dayun"
   const [system, setSystem] = useState("bazi"); // "bazi" | "astro" | "ziwei"
   const [astroTab, setAstroTab] = useState("today"); // "today" | "year" | "cycle"
-  const [ziweiTab, setZiweiTab] = useState("chart"); // "chart" | "year" | "decade" | "day"
+  const [ziweiTab, setZiweiTab] = useState("year"); // "year" | "decade" | "day"
+  const [ziweiDecadeIdx, setZiweiDecadeIdx] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(null); // category detail expand
@@ -3455,9 +3669,6 @@ function BaziApp() {
   }), /*#__PURE__*/React.createElement("div", {
     style: styles.tabBar
   }, [{
-    key: "chart",
-    label: "本命盤"
-  }, {
     key: "year",
     label: "流年"
   }, {
@@ -3473,84 +3684,57 @@ function BaziApp() {
       ...styles.tabBtn,
       ...(ziweiTab === t.key ? styles.tabBtnActive : {})
     }
-  }, t.label))), ziweiTab === "chart" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ZiweiChartGrid, {
-    ziwei: ziwei,
-    isWide: isWide
-  }), /*#__PURE__*/React.createElement("div", {
-    style: styles.ziweiLegend
-  }, /*#__PURE__*/React.createElement("span", null, "深色：十四主星"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#3F6B7A"
-    }
-  }, "藍色：六吉星＋祿存天馬"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#B14338"
-    }
-  }, "紅色：六煞星"), /*#__PURE__*/React.createElement("span", null, "[祿/權/科/忌]：生年四化落點")), /*#__PURE__*/React.createElement("div", {
-    style: styles.ziweiNote
-  }, "本命盤是依你的出生年月日時排出的固定命盤，一輩子不會改變，是後面「大限」「流年」「流日」判斷的基礎參考座標。命宮所在的宮位代表你與生俱來的核心特質；十二宮則分別對應人生的不同面向（兄弟手足、婚姻感情、財務狀況、健康、外出運、人際、事業、居家不動產、精神生活、父母長輩等），宮內落的主星、吉星、煞星共同組成這個面向的基本傾向，若該宮同時帶有生年四化，代表這一世在這個面向上會有比較明顯的際遇轉折。")), ziweiTab === "decade" && ziweiDecades && /*#__PURE__*/React.createElement(ZiweiDecadeSection, {
-    decades: ziweiDecades,
-    birthYear: active.birth.y,
-    isWide: isWide
-  }), ziweiTab === "year" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(YearSwitcher, {
+  }, t.label))), ziweiTab === "year" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(YearSwitcher, {
     viewYear: viewYear,
     setViewYear: setViewYear
   }), /*#__PURE__*/React.createElement("div", {
     style: styles.ziweiNote
-  }, "流年看的是「今年」這一年的整體氣氛：以流年地支對應到本命盤上同一地支的宮位，這個宮位在今年就代表「流年命宮」，宮內原本的主星、吉煞、四化都會被重新啟動、影響力放大，是這一整年相對容易被凸顯出來的主題。"), (() => {
-    const yb = ((viewYear - 4) % 12 + 12) % 12;
-    const landed = ziwei.palaces.find(p => p.branchIdx === yb);
-    if (!landed) return null;
-    const bits = [];
-    if (landed.stars.length) bits.push("主星有" + landed.stars.join("、"));
-    if (landed.luckyStars.length) bits.push("吉星有" + landed.luckyStars.join("、"));
-    if (landed.harshStars.length) bits.push("煞星有" + landed.harshStars.join("、"));
-    if (landed.sihuaTags.length) bits.push("並帶有生年四化" + landed.sihuaTags.map(t => t.star + "化" + t.tag).join("、"));
-    return /*#__PURE__*/React.createElement("div", {
-      style: styles.card
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        fontWeight: 700,
-        marginBottom: 6
+  }, "流年看的是「今年」這一年的整體氣氛：以流年地支對應到本命盤上同一地支的宮位，重新排出一組「流年十二宮」，宮內原本的主星、吉煞、四化都會被重新啟動、影響力放大，是這一整年相對容易被凸顯出來的主題。"), /*#__PURE__*/React.createElement(ZiweiFortuneSection, {
+    ziwei: ziwei,
+    anchorBranchIdx: ((viewYear - 4) % 12 + 12) % 12,
+    periodLabel: "流年",
+    expanded: expanded,
+    setExpanded: setExpanded,
+    isWide: isWide
+  })), ziweiTab === "decade" && ziweiDecades && (() => {
+    const nowY = new Date().getFullYear();
+    const curAge = nowY - active.birth.y + 1;
+    const defaultIdx = Math.max(0, ziweiDecades.findIndex(d => curAge >= d.startAge && curAge <= d.endAge));
+    const selIdx = ziweiDecadeIdx ?? defaultIdx;
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ZiweiDecadeSection, {
+      decades: ziweiDecades,
+      birthYear: active.birth.y,
+      isWide: isWide,
+      selectedIdx: selIdx,
+      onSelect: i => {
+        setZiweiDecadeIdx(i);
+        setExpanded(null);
       }
-    }, viewYear, "年 · 流年命宮落在「", landed.name, "」"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#8A8272",
-        lineHeight: 1.8
-      }
-    }, bits.length ? bits.join("；") + "。" : "此宮本命無主星、吉煞星進駐，屬於較平穩、不特別被放大的一年。", "流年命宮以該年地支對應之本命宮位判定；流年專屬的四化飛星（用流年天干另外飛佈）規劃於後續階段補上，此處先提供本命星曜落宮的參考。"));
-  })())), ziweiTab === "day" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DateSwitcher, {
+    }), /*#__PURE__*/React.createElement(ZiweiFortuneSection, {
+      ziwei: ziwei,
+      anchorBranchIdx: ziweiDecades[selIdx].branchIdx,
+      periodLabel: "大限",
+      expanded: expanded,
+      setExpanded: setExpanded,
+      isWide: isWide
+    }));
+  })(), ziweiTab === "day" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DateSwitcher, {
     viewDate: viewDate,
     setViewDate: setViewDate
   }), /*#__PURE__*/React.createElement("div", {
     style: styles.ziweiNote
-  }, "流日是紫微斗數裡最細的一層：從流年的「斗君」（該年正月所在宮）起算，順時針排出每個月的流月宮，再從流月宮起初一、順時針每天移一宮、十二天一輪，排出每天的流日宮。流日宮內的星曜會是這一天相對被放大的主題，常用於挑選談判、簽約、面試等重要時機的參考。"), (() => {
+  }, "流日是紫微斗數裡最細的一層：從流年的「斗君」（該年正月所在宮）起算，順時針排出每個月的流月宮，再從流月宮起初一、順時針每天移一宮、十二天一輪，排出每天的流日宮（傳統通行算法）。"), (() => {
     const vd = new Date(viewDate + "T12:00:00");
     const flow = computeZiweiFlowDay(ziwei, vd.getFullYear(), vd.getMonth() + 1, vd.getDate(), 12, 0);
-    const landed = flow.palace;
-    if (!landed) return null;
-    const bits = [];
-    if (landed.stars.length) bits.push("主星有" + landed.stars.join("、"));
-    if (landed.luckyStars.length) bits.push("吉星有" + landed.luckyStars.join("、"));
-    if (landed.harshStars.length) bits.push("煞星有" + landed.harshStars.join("、"));
-    return /*#__PURE__*/React.createElement("div", {
-      style: styles.card
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        fontWeight: 700,
-        marginBottom: 6
-      }
-    }, "農曆", flow.flowLunar.isLeapMonth ? "閏" : "", flow.flowLunar.lunarMonth, "月", flow.flowLunar.lunarDay, "日 · 流日宮落在「", landed.name, "」"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#8A8272",
-        lineHeight: 1.8
-      }
-    }, bits.length ? bits.join("；") + "。" : "此宮本命無主星、吉煞星進駐，屬於較平淡的一天。", "流日算法採多數文獻共同使用的傳統通行做法（斗君起流月、流月起初一），歷史上流日層級另有研究者提出不同算法，此處先提供主流算法的參考結果。"));
-  })()))  : /*#__PURE__*/React.createElement(EmptyState, {
+    return /*#__PURE__*/React.createElement(ZiweiFortuneSection, {
+      ziwei: ziwei,
+      anchorBranchIdx: flow.flowDayPalaceBranchIdx,
+      periodLabel: "流日",
+      expanded: expanded,
+      setExpanded: setExpanded,
+      isWide: isWide
+    });
+  })()))) : /*#__PURE__*/React.createElement(EmptyState, {
     onAdd: () => setShowForm(true)
   });
   const TOOLS = [{
@@ -5320,6 +5504,7 @@ function ZiweiCard({
   onDelete
 }) {
   const [confirmDel, setConfirmDel] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const tablets = [{
     label: "五行局",
     value: ziwei.bureauInfo.name
@@ -5332,6 +5517,22 @@ function ZiweiCard({
   }, {
     label: "農曆生日",
     value: `${ziwei.lunar.isLeapMonth ? "閏" : ""}${ziwei.lunar.lunarMonth}月${ziwei.lunar.lunarDay}日`
+  }];
+  const DEEPDIVE_SECTIONS = [{
+    title: "性格特質",
+    palaceName: "命宮"
+  }, {
+    title: "工作事業",
+    palaceName: "官祿"
+  }, {
+    title: "財運",
+    palaceName: "財帛"
+  }, {
+    title: "人際關係",
+    palaceName: "交友"
+  }, {
+    title: "感情",
+    palaceName: "夫妻"
   }];
   return /*#__PURE__*/React.createElement("div", {
     style: styles.card
@@ -5385,7 +5586,56 @@ function ZiweiCard({
       fontWeight: 700,
       marginTop: 2
     }
-  }, t.value)))));
+  }, t.value)))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowMore(v => !v),
+    style: styles.moreToggle
+  }, showMore ? "收起命盤深度解讀" : "查看命盤深度解讀", showMore ? /*#__PURE__*/React.createElement(ChevronUp, {
+    size: 13
+  }) : /*#__PURE__*/React.createElement(ChevronDown, {
+    size: 13
+  })), showMore && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "本命盤"), /*#__PURE__*/React.createElement(ZiweiChartGrid, {
+    ziwei: ziwei,
+    isWide: isWide
+  }), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiLegend
+  }, /*#__PURE__*/React.createElement("span", null, "深色：十四主星"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#3F6B7A"
+    }
+  }, "藍色：六吉星＋祿存天馬"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#B14338"
+    }
+  }, "紅色：六煞星"), /*#__PURE__*/React.createElement("span", null, "[祿/權/科/忌]：生年四化落點")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 10
+    }
+  }, "本命盤是依你的出生年月日時排出的固定命盤，一輩子不會改變，是後面「大限」「流年」「流日」判斷的基礎參考座標。十二宮分別對應人生的不同面向，宮內落的主星、吉星、煞星共同組成這個面向的基本傾向，若該宮同時帶有生年四化，代表這一世在這個面向上會有比較明顯的際遇轉折。")), DEEPDIVE_SECTIONS.map((sec, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: styles.subBlock
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, sec.title), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, ziweiPalaceNarrative(ziwei.palaces.find(p => p.name === sec.palaceName))))), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      fontSize: 11,
+      color: "#A79C86"
+    }
+  }, "以上分析以「", DEEPDIVE_SECTIONS.map(s => s.palaceName).join("、"), "」宮位內的星曜組合為主要依據，屬於本命固定的基本盤，不隨時間變化；實際個性與發展仍會受後天環境、教育與個人選擇共同影響，僅供自我認識的參考。")));
 }
 
 /* ---------------- 紫微斗數：十二宮格局 ---------------- */
@@ -5488,7 +5738,9 @@ function ZiweiChartGrid({
 function ZiweiDecadeSection({
   decades,
   birthYear,
-  isWide
+  isWide,
+  selectedIdx,
+  onSelect
 }) {
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5501,18 +5753,25 @@ function ZiweiDecadeSection({
       lineHeight: 1.7,
       margin: "0 2px 10px"
     }
-  }, "大限每十年為一運，起運歲數等於五行局數，第一限即命宮本身；依生年干陰陽與性別決定順、逆行方向，此階段呈現各限落於哪一宮、宮內有哪些主星，作為長期基調參考。"), /*#__PURE__*/React.createElement("div", {
+  }, "大限每十年為一運，起運歲數等於五行局數，第一限即命宮本身；依生年干陰陽與性別決定順、逆行方向。點選任一大限可在下方查看該十年的完整運勢分析。"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: isWide ? "grid" : "flex",
       gridTemplateColumns: isWide ? "repeat(2, 1fr)" : undefined,
       flexDirection: isWide ? undefined : "column",
       gap: 8
     }
-  }, decades.map((d, i) => /*#__PURE__*/React.createElement("div", {
+  }, decades.map((d, i) => /*#__PURE__*/React.createElement("button", {
     key: i,
+    onClick: () => onSelect(i),
     style: {
       ...styles.fortuneCard,
-      padding: "12px 14px"
+      padding: "12px 14px",
+      textAlign: "left",
+      cursor: "pointer",
+      ...(selectedIdx === i ? {
+        border: "1.5px solid #3F6B7A",
+        background: "rgba(63,107,122,0.06)"
+      } : {})
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5548,6 +5807,117 @@ function ZiweiDecadeSection({
       color: "#8A8272"
     }
   }, d.stars.length ? d.stars.join("・") : "—")))))));
+}
+
+/* ---------------- 紫微斗數：流日／流年／大限 運勢分析（比照八字/星座的分數卡片呈現） ---------------- */
+function ZiweiFortuneSection({
+  ziwei,
+  anchorBranchIdx,
+  periodLabel,
+  expanded,
+  setExpanded,
+  isWide
+}) {
+  const fortune = computeZiweiFortune(ziwei, anchorBranchIdx);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.dayPillarBanner
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: styles.bannerEyebrow
+  }, periodLabel, "命宮"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      letterSpacing: 2
+    }
+  }, BRANCHES[anchorBranchIdx], /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#8a8272",
+      marginLeft: 8,
+      fontWeight: 400
+    }
+  }, "宮"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bannerEyebrow
+  }, "本命此宮主星"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: "#b3492b"
+    }
+  }, (() => {
+    const p = ziwei.palaces.find(x => x.branchIdx === anchorBranchIdx);
+    return p && p.stars.length ? p.stars.join("・") : "空宮";
+  })()))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: isWide ? "grid" : "flex",
+      gridTemplateColumns: isWide ? "repeat(2, 1fr)" : undefined,
+      flexDirection: isWide ? undefined : "column",
+      gap: 8,
+      marginTop: 10
+    }
+  }, CATEGORY_META.map(({
+    key,
+    label,
+    icon: Icon
+  }) => {
+    const score = fortune.scores[key];
+    const palace = fortune.details[key].palace;
+    const isOpen = expanded === key;
+    return /*#__PURE__*/React.createElement("div", {
+      key: key,
+      style: styles.fortuneCard
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setExpanded(isOpen ? null : key),
+      style: styles.fortuneCardHead
+    }, /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneIconWrap
+    }, /*#__PURE__*/React.createElement(Icon, {
+      size: 15,
+      color: "#b3492b"
+    })), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneTextCol
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600,
+        marginBottom: 3
+      }
+    }, label), /*#__PURE__*/React.createElement("p", {
+      style: styles.fortuneSummary
+    }, palace && palace.stars.length ? palace.stars.join("・") : "此宮無主星")), /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneScoreCol
+    }, /*#__PURE__*/React.createElement(StarScore, {
+      score: score
+    }), isOpen ? /*#__PURE__*/React.createElement(ChevronUp, {
+      size: 14,
+      color: "#8a8272"
+    }) : /*#__PURE__*/React.createElement(ChevronDown, {
+      size: 14,
+      color: "#8a8272"
+    }))), isOpen && /*#__PURE__*/React.createElement("div", {
+      style: styles.fortuneCardDetail
+    }, /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7
+      }
+    }, "此", periodLabel, "「", label, "」看的是重新排列後的「", palace ? palace.name : "", "」宮（位於", palace ? BRANCHES[palace.branchIdx] : "", "）：", ziweiPalaceNarrative(palace)), key === "overall" && /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 8px",
+        lineHeight: 1.7,
+        fontSize: 11,
+        color: "#A79C86"
+      }
+    }, "分數是把宮位內星曜依傳統性質（吉星偏正、煞星偏負）加總換算而成的簡化模型，用於呈現大致高低落差；星曜實際吉凶還會受三方四正組合、廟旺陷弱等更精細規則影響，僅供日常參考，不是精密論命。")));
+  })));
 }
 
 /* ---------------- 出生地城市座標對照表（用於輸入城市名稱後自動帶入經緯度） ---------------- */
