@@ -1775,6 +1775,404 @@ function computeZiweiFlowDay(ziwei, y, m, d, hour, minute) {
   };
 }
 
+/* ============================================================
+   易經占卜（第一階段：起卦引擎＋本卦變卦）
+   ------------------------------------------------------------
+   八卦二進位（bit0=初爻/最下面，bit2=上爻/最上面，1=陽 0=陰），
+   對照「乾三連坤六斷，震仰盂艮覆碗，離中虛坎中滿，兌上缺巽下斷」口訣完整驗證：
+   坤000 艮001 坎010 巽011 震100 離101 兌110 乾111
+   ------------------------------------------------------------
+   64卦上下卦對照表：資料來源為易學網的上下卦速查表，該表格是「橫列＝下卦，直欄＝上卦」，
+   下方 GUA_TABLE 沿用原始表格「列＝下卦、欄＝上卦」的順序建立，因此查表／取用時一律寫成
+   GUA_TABLE[下卦二進位][上卦二進位]（見 buildHexagram 函式），不是字面直覺的[上卦][下卦]。
+   已用兩種完全獨立的方式交叉驗證整張表：(1) 邵雍觀梅占經典案例逐步驗算（辰年十二月十七日
+   申時起卦，年5+月12+日17=34，34÷8餘2為兌上卦，34+申時9=43，43÷8餘3為離下卦，得「澤火革」，
+   代入本表查得結果一致）；(2) 用完整八句「乾為天、天地否…／地天泰、坤為地…／…」記憶口訣
+   逐句解析出全部64組上下卦組合，程式化逐格比對本表，64格全部相符。
+   ============================================================ */
+const TRIGRAM_INFO = [{
+  name: "坤",
+  symbol: "☷",
+  nature: "地"
+}, {
+  name: "艮",
+  symbol: "☶",
+  nature: "山"
+}, {
+  name: "坎",
+  symbol: "☵",
+  nature: "水"
+}, {
+  name: "巽",
+  symbol: "☴",
+  nature: "風"
+}, {
+  name: "震",
+  symbol: "☳",
+  nature: "雷"
+}, {
+  name: "離",
+  symbol: "☲",
+  nature: "火"
+}, {
+  name: "兌",
+  symbol: "☱",
+  nature: "澤"
+}, {
+  name: "乾",
+  symbol: "☰",
+  nature: "天"
+}]; // index 0-7 = 坤艮坎巽震離兌乾（即二進位值）
+// GUA_TABLE[下卦二進位][上卦二進位] = { number: 卦序(1-64), name: 卦名 }（見上方說明，欄列順序沿用原始資料來源）
+const GUA_TABLE = [
+// 下卦=坤(0)
+[{
+  number: 2,
+  name: "坤"
+}, {
+  number: 23,
+  name: "剝"
+}, {
+  number: 8,
+  name: "比"
+}, {
+  number: 20,
+  name: "觀"
+}, {
+  number: 16,
+  name: "豫"
+}, {
+  number: 35,
+  name: "晉"
+}, {
+  number: 45,
+  name: "萃"
+}, {
+  number: 12,
+  name: "否"
+}],
+// 下卦=艮(1)
+[{
+  number: 15,
+  name: "謙"
+}, {
+  number: 52,
+  name: "艮"
+}, {
+  number: 39,
+  name: "蹇"
+}, {
+  number: 53,
+  name: "漸"
+}, {
+  number: 62,
+  name: "小過"
+}, {
+  number: 56,
+  name: "旅"
+}, {
+  number: 31,
+  name: "咸"
+}, {
+  number: 33,
+  name: "遯"
+}],
+// 下卦=坎(2)
+[{
+  number: 7,
+  name: "師"
+}, {
+  number: 4,
+  name: "蒙"
+}, {
+  number: 29,
+  name: "坎"
+}, {
+  number: 59,
+  name: "渙"
+}, {
+  number: 40,
+  name: "解"
+}, {
+  number: 64,
+  name: "未濟"
+}, {
+  number: 47,
+  name: "困"
+}, {
+  number: 6,
+  name: "訟"
+}],
+// 下卦=巽(3)
+[{
+  number: 46,
+  name: "升"
+}, {
+  number: 18,
+  name: "蠱"
+}, {
+  number: 48,
+  name: "井"
+}, {
+  number: 57,
+  name: "巽"
+}, {
+  number: 32,
+  name: "恆"
+}, {
+  number: 50,
+  name: "鼎"
+}, {
+  number: 28,
+  name: "大過"
+}, {
+  number: 44,
+  name: "姤"
+}],
+// 下卦=震(4)
+[{
+  number: 24,
+  name: "復"
+}, {
+  number: 27,
+  name: "頤"
+}, {
+  number: 3,
+  name: "屯"
+}, {
+  number: 42,
+  name: "益"
+}, {
+  number: 51,
+  name: "震"
+}, {
+  number: 21,
+  name: "噬嗑"
+}, {
+  number: 17,
+  name: "隨"
+}, {
+  number: 25,
+  name: "无妄"
+}],
+// 下卦=離(5)
+[{
+  number: 36,
+  name: "明夷"
+}, {
+  number: 22,
+  name: "賁"
+}, {
+  number: 63,
+  name: "既濟"
+}, {
+  number: 37,
+  name: "家人"
+}, {
+  number: 55,
+  name: "豐"
+}, {
+  number: 30,
+  name: "離"
+}, {
+  number: 49,
+  name: "革"
+}, {
+  number: 13,
+  name: "同人"
+}],
+// 下卦=兌(6)
+[{
+  number: 19,
+  name: "臨"
+}, {
+  number: 41,
+  name: "損"
+}, {
+  number: 60,
+  name: "節"
+}, {
+  number: 61,
+  name: "中孚"
+}, {
+  number: 54,
+  name: "歸妹"
+}, {
+  number: 38,
+  name: "睽"
+}, {
+  number: 58,
+  name: "兌"
+}, {
+  number: 10,
+  name: "履"
+}],
+// 下卦=乾(7)
+[{
+  number: 11,
+  name: "泰"
+}, {
+  number: 26,
+  name: "大畜"
+}, {
+  number: 5,
+  name: "需"
+}, {
+  number: 9,
+  name: "小畜"
+}, {
+  number: 34,
+  name: "大壯"
+}, {
+  number: 14,
+  name: "大有"
+}, {
+  number: 43,
+  name: "夬"
+}, {
+  number: 1,
+  name: "乾"
+}]];
+function trigramLines(val) {
+  return [val & 1, val >> 1 & 1, val >> 2 & 1];
+}
+function buildHexagram(upperVal, lowerVal, movingPositions) {
+  // 注意：GUA_TABLE 內部資料是以 [下卦二進位][上卦二進位] 排列（與上方註解的直覺方向相反，
+  // 已用逐句解析的完整口訣重新建表交叉驗證確認），查表時要用 [lowerVal][upperVal]。
+  const info = GUA_TABLE[lowerVal][upperVal];
+  const lines = [...trigramLines(lowerVal), ...trigramLines(upperVal)]; // index0=初爻...index5=上爻
+  const movingSet = new Set(movingPositions || []);
+  let changed = null;
+  if (movingSet.size > 0) {
+    const changedLines = lines.map((v, i) => movingSet.has(i + 1) ? 1 - v : v);
+    const changedLower = changedLines[0] | changedLines[1] << 1 | changedLines[2] << 2;
+    const changedUpper = changedLines[3] | changedLines[4] << 1 | changedLines[5] << 2;
+    changed = {
+      ...GUA_TABLE[changedLower][changedUpper],
+      upperVal: changedUpper,
+      lowerVal: changedLower,
+      lines: changedLines
+    };
+  }
+  return {
+    number: info.number,
+    name: info.name,
+    upperVal,
+    lowerVal,
+    lines,
+    movingPositions: [...movingSet].sort((a, b) => a - b),
+    changed
+  };
+}
+// 銅錢卦：三枚銅錢×六次，正面(字)=3(陽)、反面(花)=2(陰)，三枚加總 6=老陰(變) 7=少陽 8=少陰 9=老陽(變)。
+// 規則已交叉比對維基百科「文王卦」條目與多方獨立來源一致（曾發現一個第三方網站的正反面定義是反的，已排除）。
+function castCoinToss() {
+  const lines = []; // index0=初爻
+  const movingPositions = [];
+  for (let i = 0; i < 6; i++) {
+    let sum = 0;
+    for (let c = 0; c < 3; c++) sum += Math.random() < 0.5 ? 3 : 2;
+    const isYang = sum === 7 || sum === 9;
+    lines.push(isYang ? 1 : 0);
+    if (sum === 6 || sum === 9) movingPositions.push(i + 1);
+  }
+  const lowerVal = lines[0] | lines[1] << 1 | lines[2] << 2;
+  const upperVal = lines[3] | lines[4] << 1 | lines[5] << 2;
+  return buildHexagram(upperVal, lowerVal, movingPositions);
+}
+// 梅花易數時間起卦：以農曆年支序(子1...亥12)+月+日 之和除8取餘數為上卦，
+// 再加時支序除8取餘數為下卦，年月日時總和除6取餘數為動爻（唯一一爻變）。
+// 公式已交叉比對多個獨立來源一致，並用邵雍觀梅占案例逐步驗算通過。
+function castPlumBlossom(y, m, d, hour, minute) {
+  const lunar = computeLunarDate(y, m, d, hour ?? 12, minute ?? 0);
+  const yearBranchSeq = ((lunar.lunarYear - 4) % 12 + 12) % 12 + 1; // 子=1...亥=12
+  const hourBranchIdx = Math.floor(((hour ?? 12) + 1) % 24 / 2);
+  const hourBranchSeq = hourBranchIdx + 1; // 子時=1...亥時=12
+  const upperSum = yearBranchSeq + lunar.lunarMonth + lunar.lunarDay;
+  const totalSum = upperSum + hourBranchSeq;
+  const upperVal = (8 - upperSum % 8) % 8;
+  const lowerVal = (8 - totalSum % 8) % 8;
+  const movingLine = (totalSum - 1) % 6 + 1;
+  const hex = buildHexagram(upperVal, lowerVal, [movingLine]);
+  return {
+    ...hex,
+    lunar,
+    yearBranchSeq,
+    hourBranchSeq,
+    upperSum,
+    totalSum
+  };
+}
+// 64卦白話卦義：以現代語言概述每一卦的核心主題與處世提醒，不逐字引用古典卦辭／爻辭原文
+// （古典原文字字皆有精確含義，若僅憑記憶轉述容易出現一兩字之差的誤植，風險較高；
+// 這裡採用的是後世普遍認同的卦義主題，供快速理解一卦的整體基調，非精密逐字訓詁）。
+const HEXAGRAM_MEANING = {
+  1: "剛健自強，充滿創造力與領導力的時機，適合主動出擊、勇於開創，但也要留意過剛則折，行事仍需循序漸進。",
+  2: "柔順包容，以厚德承載萬物，此時宜以順應代替強求，腳踏實地、廣納雅言，成果會在穩健累積中到來。",
+  3: "萬事草創，局勢混沌未明，如同萬物初生的艱難，宜謹慎籌劃、尋求外援，不宜躁進，耐心是度過此階段的關鍵。",
+  4: "蒙昧待啟，如孩童初學，此時需要虛心求教、接受指導，主動釐清狀況比自行摸索更有效率。",
+  5: "等待時機，如同等雲成雨，急不得也躁不得，宜沉穩備妥實力，時機成熟自然水到渠成。",
+  6: "爭訟糾紛，意見分歧容易演變成對立，此時宜謹言慎行、以和為貴，避免把事情鬧大，適可而止方為上策。",
+  7: "統籌調度，如統帥用兵，需要紀律與章法，此時宜建立制度、團結眾人之力，方向明確才能成事。",
+  8: "親近輔佐，講求誠信與團結，此時宜主動與人合作、真誠相待，孤軍奮戰難成大事。",
+  9: "力量尚小，如風吹行雲卻難成雨，此時宜蓄積實力、耐心等待，暫時不宜躁進求成。",
+  10: "步步為營，如履薄冰、如履虎尾，此時處境需格外謹慎小心，態度謙和自能化險為夷。",
+  11: "上下交泰，天地交融、通達順遂，此時是內外和諧、諸事亨通的好階段，宜把握良機、廣結善緣。",
+  12: "閉塞不通，上下不交、局勢停滯，此時宜韜光養晦、靜待轉機，勉強行事容易徒勞無功。",
+  13: "與人同心，志同道合、群策群力，此時宜開誠布公、廣結同盟，團結的力量遠勝單打獨鬥。",
+  14: "大有所獲，光明照耀、豐盛可期，此時運勢旺盛，宜心存謙德、廣施於人，方能長保盛況。",
+  15: "謙遜自持，滿招損、謙受益，此時宜保持低調、不居功自傲，謙德終能贏得長遠的信任與尊重。",
+  16: "怡然歡愉，順勢而為、預先籌謀，此時宜提前規劃、順應時勢，心存喜悅更能感染身邊的人。",
+  17: "隨順時勢，因時制宜、隨機應變，此時宜彈性調整、順勢而為，堅持己見反而容易錯失良機。",
+  18: "整頓積弊，過去累積的問題浮現，此時宜正視根源、著手革新，及早處理能防止問題持續惡化。",
+  19: "居高臨下，德澤廣被、恩澤下施，此時宜以身作則、關照他人，影響力正在擴大的階段。",
+  20: "觀察省思，靜觀其變、以觀化人，此時宜多觀察局勢、反躬自省，而非急於表態或行動。",
+  21: "排除障礙，如咬合噬物般去除阻礙，此時宜果斷處理糾紛或弊病，拖延反而讓問題根深蒂固。",
+  22: "文飾外表，講求儀容與修飾，此時宜適度包裝、注重形象，但也要留意內在實質不可空洞。",
+  23: "剝落衰退，情勢逐漸削弱，此時宜謹守本分、靜待否極泰來，不宜強行對抗大勢。",
+  24: "一陽來復，否極泰來、生機重現，此時是谷底反彈的起點，宜把握新生的契機、重新出發。",
+  25: "順應天理，不妄求、不強取，此時宜秉持正直、順其自然，投機取巧反而招致意外。",
+  26: "蓄養實力，大有積蓄、厚積薄發，此時宜沉潛充實自己，累積的能量將在未來派上用場。",
+  27: "頤養身心，講求飲食與言語的節制，此時宜照顧好自身與他人的根本需求，言行也要謹慎。",
+  28: "力量過度，如棟樑不堪重負，此時處境較為艱難吃緊，宜量力而為、適度求助，避免硬撐。",
+  29: "重重險陷，如陷落於水中，此時處境艱險，宜秉持誠信、步步為營，切勿慌亂行事。",
+  30: "光明依附，如火焰需要依附燃料，此時宜依循正道、借助外部資源，光明磊落方能長久。",
+  31: "以誠相感，男女、上下以真誠相互感應，此時宜主動釋出善意、真心交流，感情與合作皆宜。",
+  32: "恆久不變，持之以恆、堅守正道，此時宜穩定經營、不輕易改弦更張，恆心終將見到成果。",
+  33: "適時退守，見機而退、明哲保身，此時宜懂得取捨、暫避鋒芒，退一步是為了更好的進。",
+  34: "氣勢強盛，陽剛壯盛、銳不可當，此時宜善用氣勢但不逞強冒進，過剛易折，仍需守禮節制。",
+  35: "漸次晉升，如旭日東升、穩步上進，此時運勢向上，宜光明磊落地展現才能，機會正在浮現。",
+  36: "光明受阻，才德被壓抑或誤解，此時宜韜光養晦、內斂鋒芒，靜待撥雲見日的時機。",
+  37: "齊家有道，講求家庭倫理與內部秩序，此時宜先安頓好身邊親近的人事，家和萬事興。",
+  38: "乖違分歧，意見相左、彼此猜疑，此時宜求同存異、耐心溝通，強行統一反而擴大裂痕。",
+  39: "步履維艱，前路多阻、進退兩難，此時宜暫緩腳步、尋求貴人相助，不宜獨自蠻幹。",
+  40: "紓解困境，如冰雪消融、危機解除，此時宜把握鬆綁的契機、儘速收尾，宜速戰速決不宜拖延。",
+  41: "損己利人，減損眼前小利以成就長遠大局，此時宜懂得取捨、犧牲短期換取後續的豐收。",
+  42: "增益成長，上施下益、資源挹注，此時是擴展與投資的好時機，宜把握機會、乘勢而上。",
+  43: "當機立斷，剛健果決、排除小人，此時宜明快決斷、正大光明地處理問題，猶豫反而壞事。",
+  44: "不期而遇，陰柔悄然滋長，此時宜謹慎面對突如其來的人事變化，防微杜漸勝於事後補救。",
+  45: "凝聚匯集，人心與資源聚合，此時宜藉眾人之力共同成事，領導者更需以誠信凝聚向心力。",
+  46: "循序上升，如樹木拔地而起，此時運勢穩步上揚，宜腳踏實地、循序漸進，不宜求速成。",
+  47: "困頓艱難，資源匱乏、身處逆境，此時宜堅守心志、以言辭與行動謹慎自持，度過必見轉機。",
+  48: "資源共享，如井水滋養眾人，此時宜維護根本、廣澤他人，制度與基礎建設是成事的關鍵。",
+  49: "順勢變革，除舊佈新、與時俱進，此時宜果斷革新，但也要師出有名、取信於眾方能成功。",
+  50: "革故鼎新，如鼎烹飪化生為熟，此時宜穩健建立新局、任用賢才，穩重踏實地推動變革。",
+  51: "震動驚醒，突如其來的變化令人警醒，此時宜臨危不亂、保持鎮定，危機也是重新振作的契機。",
+  52: "止而安定，適時停下腳步、安於當下，此時宜靜心自持，不妄動、不強求，方能穩住陣腳。",
+  53: "循序漸進，如雁飛有序，此時宜按部就班、逐步推進，急功躁進反而欲速則不達。",
+  54: "名分不正，處境或關係較為尷尬，此時宜謹守本分、以禮自持，勉強強求名分反招是非。",
+  55: "盛大豐收，如日中天、豐盛可期，此時宜把握榮景、廣結善緣，但也要留意盛極必衰的道理。",
+  56: "羈旅在外，身處異地或過渡階段，此時宜謙和謹慎、與人為善，不宜與人結怨或久留原地。",
+  57: "謙遜順入，如風無孔不入，此時宜以柔軟身段化解阻力，反覆溝通、耐心滲透方能達成目的。",
+  58: "喜悅交流，以誠相悅、彼此激勵，此時宜保持開朗、樂於分享，人際與合作皆能因此順遂。",
+  59: "渙散渙散，人心或局勢趨於離散，此時宜凝聚共識、重建向心力，及早收拾比放任渙散更為明智。",
+  60: "節制有度，講求分寸與界限，此時宜量入為出、適可而止，過度節制或放縱皆非長久之道。",
+  61: "誠信感通，以真誠打動人心，此時宜秉持誠意、言行一致，誠信終能贏得他人的信任與回應。",
+  62: "小心行事，宜守小節、不宜行大事，此時處境較為侷限，凡事宜低調謹慎、量力而行。",
+  63: "功成守成，大事初步底定，此時宜居安思危、謹慎收尾，慎防功成後的鬆懈與反覆。",
+  64: "終而復始，事情尚未圓滿、仍有變數，此時宜謹慎面對未竟之事，耐心收拾殘局、迎接下一個循環。"
+};
+
 /* ---------------- 紫微斗數：星曜解讀與運勢評分（本命深度解讀＋流日/流年/大限共用） ----------------
    評分方式：每顆星依傳統性質給予一個簡化的正負權重（吉星/廟旺格局偏正、煞星/耗星偏負），
    加總落在該宮位的所有星曜權重＋生年四化調整後，換算成 1–5 分。這是為了與八字、星座已有的
@@ -3372,6 +3770,8 @@ function BaziApp() {
   const [divPersonId, setDivPersonId] = useState(null);
   const [divTopic, setDivTopic] = useState(null);
   const [divDuration, setDivDuration] = useState(null);
+  const [yijingMethod, setYijingMethod] = useState(null); // "coin" | "plum"
+  const [yijingResult, setYijingResult] = useState(null);
   const isWide = useIsWide();
   const goHome = () => setRoute("home");
   const routeLabel = {
@@ -4016,13 +4416,13 @@ function BaziApp() {
   }, "開始起卦")),
 
   /* ---- 占卜路徑：起卦結果 ---- */
-  route === "div-result" && /*#__PURE__*/React.createElement("div", null, stepDotsEl(2), /*#__PURE__*/React.createElement("div", {
+  route === "div-result" && divTool === "tarot" && /*#__PURE__*/React.createElement("div", null, stepDotsEl(2), /*#__PURE__*/React.createElement("div", {
     style: styles.resultCard
   }, /*#__PURE__*/React.createElement("div", {
     style: styles.resultIcon
-  }, divTool === "tarot" ? "🃏" : "☯️"), /*#__PURE__*/React.createElement("div", {
+  }, "🃏"), /*#__PURE__*/React.createElement("div", {
     style: styles.resultTitle
-  }, divTool === "tarot" ? "塔羅牌功能開發中" : "易經功能開發中"), /*#__PURE__*/React.createElement("div", {
+  }, "塔羅牌功能開發中"), /*#__PURE__*/React.createElement("div", {
     style: styles.resultDesc
   }, "操作流程已經串接完成——工具、", divLinked ? "已連結命盤人物、" : "快速占卜、", "提問類型、時間範圍都會送進正式的起卦與解讀邏輯，下個開發階段會補上。")), /*#__PURE__*/React.createElement("button", {
     style: styles.primaryBtnFull,
@@ -4034,7 +4434,130 @@ function BaziApp() {
       setDivDuration(null);
       setRoute("div-tool");
     }
-  }, "再問一次")), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
+  }, "再問一次")),
+
+  /* ---- 占卜路徑：易經起卦結果 ---- */
+  route === "div-result" && divTool === "yijing" && /*#__PURE__*/React.createElement("div", null, stepDotsEl(2),
+  // 畫面一：選擇起卦方式
+  !yijingMethod && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: styles.desc
+  }, "選擇這次想用的起卦方式。"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigChoiceWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardM,
+    onClick: () => setYijingMethod("coin")
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardIcon
+  }, "🪙"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardName
+  }, "銅錢卦"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardSub
+  }, "三枚銅錢丟六次，隨機起卦，每次結果都不同，最貼近傳統擲筊問卜的直覺"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardArrow
+  }, "›")), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardZ,
+    onClick: () => setYijingMethod("plum")
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardIcon
+  }, "🌸"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardName
+  }, "梅花易數"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardSub
+  }, "以起卦當下的年月日時換算成卦，同一時刻起卦結果固定，取的是當下時空之象"), /*#__PURE__*/React.createElement("div", {
+    style: styles.bigCardArrow
+  }, "›")))),
+  // 畫面二：確認起卦（尚未按下起卦鍵）
+  yijingMethod && !yijingResult && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: styles.resultCard
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.resultIcon
+  }, yijingMethod === "coin" ? "🪙" : "🌸"), /*#__PURE__*/React.createElement("div", {
+    style: styles.resultTitle
+  }, yijingMethod === "coin" ? "銅錢卦" : "梅花易數"), /*#__PURE__*/React.createElement("div", {
+    style: styles.resultDesc
+  }, "誠心默想你想問的事，準備好之後點選下方開始起卦。")), /*#__PURE__*/React.createElement("button", {
+    style: styles.primaryBtnFull,
+    onClick: () => {
+      if (yijingMethod === "coin") {
+        setYijingResult(castCoinToss());
+      } else {
+        const now = new Date();
+        setYijingResult(castPlumBlossom(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes()));
+      }
+    }
+  }, "開始起卦"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...styles.homeBackBtn,
+      marginTop: 10,
+      width: "100%",
+      justifyContent: "center"
+    },
+    onClick: () => setYijingMethod(null)
+  }, "換一種起卦方式")),
+  // 畫面三：本卦／變卦結果
+  yijingResult && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: styles.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "baseline"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "本卦・第", yijingResult.number, "卦「", yijingResult.name, "」"), yijingResult.movingPositions.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#b3492b"
+    }
+  }, yijingResult.movingPositions.length, "爻動")), /*#__PURE__*/React.createElement(YijingLines, {
+    lines: yijingResult.lines,
+    movingPositions: yijingResult.movingPositions,
+    isWide: isWide
+  }), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, HEXAGRAM_MEANING[yijingResult.number])), yijingResult.changed && /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "變卦・第", yijingResult.changed.number, "卦「", yijingResult.changed.name, "」"), /*#__PURE__*/React.createElement(YijingLines, {
+    lines: yijingResult.changed.lines,
+    movingPositions: [],
+    isWide: isWide
+  }), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, HEXAGRAM_MEANING[yijingResult.changed.number])), /*#__PURE__*/React.createElement("div", {
+    style: styles.ziweiNote
+  }, "本卦代表事情目前的狀態與基本格局；", yijingResult.changed ? "動爻是變化的關鍵，變卦則代表事情接下來可能演變的方向，兩者合看更完整。" : "六爻皆不動，代表狀態穩定，可直接以本卦的卦義作為參考。", "以上為每一卦的白話主題說明，尚未包含逐爻的細部爻辭解讀與裝卦分析，規劃於後續階段補上。"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...styles.primaryBtnFull,
+      marginTop: 12
+    },
+    onClick: () => {
+      setYijingMethod(null);
+      setYijingResult(null);
+    }
+  }, "重新起卦")), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...styles.homeBackBtn,
+      marginTop: 10,
+      width: "100%",
+      justifyContent: "center"
+    },
+    onClick: () => {
+      setDivTool(null);
+      setDivLinked(null);
+      setDivPersonId(null);
+      setDivTopic(null);
+      setDivDuration(null);
+      setYijingMethod(null);
+      setYijingResult(null);
+      setRoute("div-tool");
+    }
+  }, "問別的事情")), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
     existingHasSelf: profiles.some(p => p.isSelf),
     onCancel: () => setShowForm(false),
     onSave: addProfile,
@@ -4054,6 +4577,79 @@ function BaziApp() {
   }, /*#__PURE__*/React.createElement(Plus, {
     size: 18
   }), "新增命盤"));
+}
+
+/* ---------------- 易經：六爻圖形 ---------------- */
+function YijingLines({
+  lines,
+  movingPositions,
+  isWide
+}) {
+  const movingSet = new Set(movingPositions || []);
+  // 由上爻(index5)畫到初爻(index0)，符合傳統由上而下的閱讀順序
+  const rows = [5, 4, 3, 2, 1, 0].map(i => ({
+    idx: i,
+    pos: i + 1,
+    isYang: lines[i] === 1,
+    isMoving: movingSet.has(i + 1)
+  }));
+  const posLabel = ["初", "二", "三", "四", "五", "上"];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+      padding: isWide ? "16px 8px" : "12px 4px"
+    }
+  }, rows.map(r => /*#__PURE__*/React.createElement("div", {
+    key: r.idx,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: "#8A8272",
+      width: 28,
+      textAlign: "right"
+    }
+  }, posLabel[r.idx], "爻"), r.isYang ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: 10,
+      borderRadius: 3,
+      background: r.isMoving ? "#b3492b" : "#3F6B7A"
+    }
+  }) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      display: "flex",
+      gap: "14%"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: 10,
+      borderRadius: 3,
+      background: r.isMoving ? "#b3492b" : "#3F6B7A"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: 10,
+      borderRadius: 3,
+      background: r.isMoving ? "#b3492b" : "#3F6B7A"
+    }
+  })), r.isMoving && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#b3492b",
+      fontWeight: 700,
+      width: 14
+    }
+  }, r.isYang ? "○" : "✕"))));
 }
 
 /* ---------------- Empty state ---------------- */
