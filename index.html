@@ -2036,17 +2036,24 @@ const GUA_TABLE = [
 function trigramLines(val) {
   return [val & 1, val >> 1 & 1, val >> 2 & 1];
 }
+// 陣列內部順序（trigramLines 的 [bit0,bit1,bit2]拼接）跟「初爻~上爻」的真實爻位並不是直接對應，
+// 已用邵雍案例以外的方式實測確認：內部index0對應真三爻、index1對應真二爻、index2對應真初爻、
+// index3對應真上爻、index4對應真五爻、index5對應真四爻。TRUE_TO_INTERNAL[i] = 陣列index i 對應的真實爻位（1-6）。
+const TRUE_TO_INTERNAL = [3, 2, 1, 6, 5, 4];
 function buildHexagram(upperVal, lowerVal, movingPositions) {
   // 注意：GUA_TABLE 內部資料是以 [下卦二進位][上卦二進位] 排列（與上方註解的直覺方向相反，
   // 已用逐句解析的完整口訣重新建表交叉驗證確認），查表時要用 [lowerVal][upperVal]。
   const info = GUA_TABLE[lowerVal][upperVal];
-  const lines = [...trigramLines(lowerVal), ...trigramLines(upperVal)]; // index0=初爻...index5=上爻
-  const movingSet = new Set(movingPositions || []);
+  const rawLines = [...trigramLines(lowerVal), ...trigramLines(upperVal)]; // 內部順序，非真實爻位順序
+  const toTrueOrder = arr => [1, 2, 3, 4, 5, 6].map(p => arr[TRUE_TO_INTERNAL[p - 1] - 1]);
+  const lines = toTrueOrder(rawLines); // 轉換後：index0=初爻...index5=上爻，供外部（顯示、裝卦）直接使用
+  const movingSet = new Set(movingPositions || []); // movingPositions 用真實爻位(1=初爻...6=上爻)
   let changed = null;
   if (movingSet.size > 0) {
-    const changedLines = lines.map((v, i) => movingSet.has(i + 1) ? 1 - v : v);
-    const changedLower = changedLines[0] | changedLines[1] << 1 | changedLines[2] << 2;
-    const changedUpper = changedLines[3] | changedLines[4] << 1 | changedLines[5] << 2;
+    const changedLines = lines.map((v, i) => movingSet.has(i + 1) ? 1 - v : v); // 此時lines已是真實爻位順序，直接用i+1比對即可
+    const changedRaw = [1, 2, 3, 4, 5, 6].map(p => changedLines[TRUE_TO_INTERNAL[p - 1] - 1]); // 換回內部順序供查表
+    const changedLower = changedRaw[0] | changedRaw[1] << 1 | changedRaw[2] << 2;
+    const changedUpper = changedRaw[3] | changedRaw[4] << 1 | changedRaw[5] << 2;
     changed = {
       ...GUA_TABLE[changedLower][changedUpper],
       upperVal: changedUpper,
@@ -2076,8 +2083,8 @@ function castCoinToss() {
     lines.push(isYang ? 1 : 0);
     if (sum === 6 || sum === 9) movingPositions.push(i + 1);
   }
-  const lowerVal = lines[0] | lines[1] << 1 | lines[2] << 2;
-  const upperVal = lines[3] | lines[4] << 1 | lines[5] << 2;
+  const lowerVal = lines[2] | lines[1] << 1 | lines[0] << 2;
+  const upperVal = lines[5] | lines[4] << 1 | lines[3] << 2;
   return buildHexagram(upperVal, lowerVal, movingPositions);
 }
 // 梅花易數時間起卦：以農曆年支序(子1...亥12)+月+日 之和除8取餘數為上卦，
@@ -2172,6 +2179,176 @@ const HEXAGRAM_MEANING = {
   63: "功成守成，大事初步底定，此時宜居安思危、謹慎收尾，慎防功成後的鬆懈與反覆。",
   64: "終而復始，事情尚未圓滿、仍有變數，此時宜謹慎面對未竟之事，耐心收拾殘局、迎接下一個循環。"
 };
+
+/* ============================================================
+   易經占卜（第二階段：六爻裝卦）
+   ------------------------------------------------------------
+   納甲表：天干地支裝入八卦六爻的對照，已交叉比對兩個獨立來源一致
+   （乾納甲壬、坤納乙癸、艮納丙、兌納丁、坎納戊、離納己、震納庚、巽納辛；
+   陽卦（乾坎艮震）由下而上順排六個陽支，陰卦（坤兌離巽）由下而上逆排六個陰支）。
+   京房八宮世應：不手key新的64格表，而是直接用第一階段已驗證過的 GUA_TABLE，
+   對每個宮的本宮卦套用「一世二世...五世→游魂→歸魂」固定的爻位翻轉規則動態算出，
+   翻轉規則已用乾宮（乾姤遯否觀剝晉大有）、坤宮（坤復臨泰大壯夬需比）兩組完整案例驗證相符。
+   ============================================================ */
+// 8個純卦（本宮卦）的納甲：inner=內卦(初二三爻)，outer=外卦(四五上爻)，各自[天干序,地支序]
+const TRIGRAM_NAJIA = {
+  7: {
+    inner: [[0, 0], [0, 2], [0, 4]],
+    outer: [[8, 6], [8, 8], [8, 10]]
+  },
+  // 乾：內甲子甲寅甲辰，外壬午壬申壬戌
+  0: {
+    inner: [[1, 7], [1, 5], [1, 3]],
+    outer: [[9, 1], [9, 11], [9, 9]]
+  },
+  // 坤：內乙未乙巳乙卯，外癸丑癸亥癸酉
+  2: {
+    inner: [[4, 2], [4, 4], [4, 6]],
+    outer: [[4, 8], [4, 10], [4, 0]]
+  },
+  // 坎：內戊寅戊辰戊午，外戊申戊戌戊子
+  1: {
+    inner: [[2, 4], [2, 6], [2, 8]],
+    outer: [[2, 10], [2, 0], [2, 2]]
+  },
+  // 艮：內丙辰丙午丙申，外丙戌丙子丙寅
+  4: {
+    inner: [[6, 0], [6, 2], [6, 4]],
+    outer: [[6, 6], [6, 8], [6, 10]]
+  },
+  // 震：內庚子庚寅庚辰，外庚午庚申庚戌
+  3: {
+    inner: [[7, 1], [7, 11], [7, 9]],
+    outer: [[7, 7], [7, 5], [7, 3]]
+  },
+  // 巽：內辛丑辛亥辛酉，外辛未辛巳辛卯
+  5: {
+    inner: [[5, 3], [5, 1], [5, 11]],
+    outer: [[5, 9], [5, 7], [5, 5]]
+  },
+  // 離：內己卯己丑己亥，外己酉己未己巳
+  6: {
+    inner: [[3, 5], [3, 3], [3, 1]],
+    outer: [[3, 11], [3, 9], [3, 7]]
+  } // 兌：內丁巳丁卯丁丑，外丁亥丁酉丁未
+};
+// 八卦（純卦）對應的五行，用於推六親
+const TRIGRAM_ELEMENT = {
+  7: "金",
+  6: "金",
+  5: "火",
+  4: "木",
+  3: "木",
+  2: "水",
+  1: "土",
+  0: "土"
+}; // 乾兌=金 離=火 震巽=木 坎=水 艮坤=土
+// 給定一個卦(upperVal,lowerVal)，裝上六爻的天干地支：直接沿用該卦本身上下卦的納甲（六爻裝卦不看宮，只看卦本身的上下卦組成）
+function najiaLines(upperVal, lowerVal) {
+  const lowerNajia = TRIGRAM_NAJIA[lowerVal].inner;
+  const upperNajia = TRIGRAM_NAJIA[upperVal].outer;
+  return [...lowerNajia, ...upperNajia]; // 6組[天干序,地支序]，index0=初爻
+}
+// 找出一個卦屬於哪一宮、第幾世（0=本宮,1-5=一至五世,6=游魂,7=歸魂），及世爻/應爻位置。
+// 做法：對8個純卦分別套用固定的爻位翻轉規則，用已驗證的 GUA_TABLE 算出宮內全部8卦，
+// 找出目標卦落在哪一組，即可反推宮別與世代。
+const WORLD_FLIP_SETS = [[], [1], [1, 2], [1, 2, 3], [1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 5], [5]];
+const WORLD_SHI_POS = [6, 1, 2, 3, 4, 5, 4, 3];
+function findPalaceInfo(upperVal, lowerVal) {
+  for (let palace = 0; palace < 8; palace++) {
+    const baseLines = [...trigramLines(palace), ...trigramLines(palace)]; // 本宮卦：上下卦相同
+    for (let world = 0; world < 8; world++) {
+      const flipSet = new Set(WORLD_FLIP_SETS[world]);
+      const lines = baseLines.map((v, i) => flipSet.has(TRUE_TO_INTERNAL[i]) ? 1 - v : v);
+      const lo = lines[0] | lines[1] << 1 | lines[2] << 2;
+      const up = lines[3] | lines[4] << 1 | lines[5] << 2;
+      if (up === upperVal && lo === lowerVal) {
+        const shi = WORLD_SHI_POS[world];
+        const ying = (shi + 2) % 6 + 1;
+        return {
+          palace,
+          world,
+          shi,
+          ying
+        };
+      }
+    }
+  }
+  return null; // 理論上64卦必定會落在某一宮，不會發生
+}
+const WORLD_LABEL = ["本宮", "一世", "二世", "三世", "四世", "五世", "游魂", "歸魂"];
+// 六親：比較該爻地支五行 與 宮五行，依「同我兄弟，生我父母，我生子孫，剋我官鬼，我剋妻財」判定
+const ELEMENT_GENERATES = {
+  木: "火",
+  火: "土",
+  土: "金",
+  金: "水",
+  水: "木"
+}; // key生value
+const ELEMENT_CONTROLS = {
+  木: "土",
+  土: "水",
+  水: "火",
+  火: "金",
+  金: "木"
+}; // key剋value
+function liuQinOf(palaceElement, lineElement) {
+  if (lineElement === palaceElement) return "兄弟";
+  if (ELEMENT_GENERATES[lineElement] === palaceElement) return "父母"; // 生我者父母
+  if (ELEMENT_GENERATES[palaceElement] === lineElement) return "子孫"; // 我生者子孫
+  if (ELEMENT_CONTROLS[lineElement] === palaceElement) return "官鬼"; // 剋我者官鬼
+  if (ELEMENT_CONTROLS[palaceElement] === lineElement) return "妻財"; // 我剋者妻財
+  return "?";
+}
+// 六神：甲乙起青龍，丙丁起朱雀，戊起勾陳，己起螣蛇，庚辛起白虎，壬癸起玄武，
+// 順序青龍→朱雀→勾陳→螣蛇→白虎→玄武，由初爻往上爻排。已用「庚申日：初爻白虎...上爻螣蛇」案例驗證。
+const LIUSHEN_NAMES = ["青龍", "朱雀", "勾陳", "螣蛇", "白虎", "玄武"];
+const LIUSHEN_START_BY_STEM = [0, 0, 1, 1, 2, 3, 4, 4, 5, 5]; // stemIdx(甲0...癸9) -> 起始六神index
+function liuShenLines(dayStemIdx) {
+  const start = LIUSHEN_START_BY_STEM[dayStemIdx];
+  return [0, 1, 2, 3, 4, 5].map(i => LIUSHEN_NAMES[(start + i) % 6]);
+}
+// 旬空：給定日干支（stemIdx,branchIdx），推算該旬的旬首地支，空亡為旬首往後數第10、11個地支。
+function xunKong(dayStemIdx, dayBranchIdx) {
+  const xunHeadBranch = ((dayBranchIdx - dayStemIdx) % 12 + 12) % 12;
+  return [(xunHeadBranch + 10) % 12, (xunHeadBranch + 11) % 12];
+}
+// 完整裝卦：給定本卦(upperVal,lowerVal,movingPositions)與起卦當天的日干支，組出六爻的完整資訊。
+function dressHexagram(hex, dayStemIdx, dayBranchIdx) {
+  const info = findPalaceInfo(hex.upperVal, hex.lowerVal);
+  const palaceElement = TRIGRAM_ELEMENT[info.palace];
+  const najia = najiaLines(hex.upperVal, hex.lowerVal);
+  const shens = liuShenLines(dayStemIdx);
+  const voidBranches = new Set(xunKong(dayStemIdx, dayBranchIdx));
+  const movingSet = new Set(hex.movingPositions || []);
+  const linesInfo = [0, 1, 2, 3, 4, 5].map(i => {
+    const [stemIdx, branchIdx] = najia[i];
+    const element = BRANCH_ELEMENT[branchIdx];
+    return {
+      pos: i + 1,
+      isYang: hex.lines[i] === 1,
+      stemIdx,
+      branchIdx,
+      element,
+      liuQin: liuQinOf(palaceElement, element),
+      liuShen: shens[i],
+      isShi: info.shi === i + 1,
+      isYing: info.ying === i + 1,
+      isVoid: voidBranches.has(branchIdx),
+      isMoving: movingSet.has(i + 1)
+    };
+  });
+  return {
+    palace: info.palace,
+    palaceName: TRIGRAM_INFO[info.palace].name + "宮",
+    palaceElement,
+    world: info.world,
+    worldLabel: WORLD_LABEL[info.world],
+    lines: linesInfo,
+    voidBranches: [...voidBranches]
+  };
+}
+
 
 /* ---------------- 紫微斗數：星曜解讀與運勢評分（本命深度解讀＋流日/流年/大限共用） ----------------
    評分方式：每顆星依傳統性質給予一個簡化的正負權重（吉星/廟旺格局偏正、煞星/耗星偏負），
@@ -4478,12 +4655,17 @@ function BaziApp() {
   }, "誠心默想你想問的事，準備好之後點選下方開始起卦。")), /*#__PURE__*/React.createElement("button", {
     style: styles.primaryBtnFull,
     onClick: () => {
-      if (yijingMethod === "coin") {
-        setYijingResult(castCoinToss());
-      } else {
-        const now = new Date();
-        setYijingResult(castPlumBlossom(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes()));
-      }
+      const now = new Date();
+      const hex = yijingMethod === "coin" ? castCoinToss() : castPlumBlossom(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes());
+      const dayJDN = toJDN(now.getFullYear(), now.getMonth() + 1, now.getDate());
+      const day = dayGanZhiFromJDN(dayJDN);
+      const dressed = dressHexagram(hex, day.stemIdx, day.branchIdx);
+      setYijingResult({
+        ...hex,
+        dayStemIdx: day.stemIdx,
+        dayBranchIdx: day.branchIdx,
+        dressed
+      });
     }
   }, "開始起卦"), /*#__PURE__*/React.createElement("button", {
     style: {
@@ -4516,7 +4698,15 @@ function BaziApp() {
     isWide: isWide
   }), /*#__PURE__*/React.createElement("p", {
     style: styles.subBlockText
-  }, HEXAGRAM_MEANING[yijingResult.number])), yijingResult.changed && /*#__PURE__*/React.createElement("div", {
+  }, HEXAGRAM_MEANING[yijingResult.number])), yijingResult.dressed && /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement(YijingDressedTable, {
+    dressed: yijingResult.dressed,
+    isWide: isWide
+  })), yijingResult.changed && /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.card,
       marginTop: 12
@@ -4531,7 +4721,7 @@ function BaziApp() {
     style: styles.subBlockText
   }, HEXAGRAM_MEANING[yijingResult.changed.number])), /*#__PURE__*/React.createElement("div", {
     style: styles.ziweiNote
-  }, "本卦代表事情目前的狀態與基本格局；", yijingResult.changed ? "動爻是變化的關鍵，變卦則代表事情接下來可能演變的方向，兩者合看更完整。" : "六爻皆不動，代表狀態穩定，可直接以本卦的卦義作為參考。", "以上為每一卦的白話主題說明，尚未包含逐爻的細部爻辭解讀與裝卦分析，規劃於後續階段補上。"), /*#__PURE__*/React.createElement("button", {
+  }, "本卦代表事情目前的狀態與基本格局；", yijingResult.changed ? "動爻是變化的關鍵，變卦則代表事情接下來可能演變的方向，兩者合看更完整。" : "六爻皆不動，代表狀態穩定，可直接以本卦的卦義作為參考。", "六爻明細裡「世」代表問卦的自己、「應」代表對方或所問之事，兩者的生剋關係是判斷吉凶的重要依據；「空」（旬空）代表該爻力量暫時虛浮、較難發揮作用；哪個六親對應你實際想問的事（例如問財運看妻財、問工作看官鬼），需要依提問類型自動判斷用神旺衰，規劃於下一階段補上。"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...styles.primaryBtnFull,
       marginTop: 12
@@ -4650,6 +4840,89 @@ function YijingLines({
       width: 14
     }
   }, r.isYang ? "○" : "✕"))));
+}
+
+/* ---------------- 易經：裝卦六爻明細表(納甲/六親/六神/世應/旬空) ---------------- */
+function YijingDressedTable({
+  dressed,
+  isWide
+}) {
+  const rows = [...dressed.lines].reverse(); // 由上爻畫到初爻
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      fontWeight: 700
+    }
+  }, dressed.palaceName, "・", dressed.worldLabel, "卦"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#8A8272"
+    }
+  }, "宮五行：", dressed.palaceElement)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, rows.map(l => /*#__PURE__*/React.createElement("div", {
+    key: l.pos,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "6px 8px",
+      borderRadius: 8,
+      background: l.isShi || l.isYing ? "rgba(63,107,122,0.06)" : "transparent",
+      fontSize: 12
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 34,
+      color: "#8A8272",
+      fontSize: 11
+    }
+  }, l.liuShen), /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 44,
+      fontWeight: 600
+    }
+  }, l.liuQin), /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 40,
+      color: l.isVoid ? "#A79C86" : "#2B2620",
+      textDecoration: l.isVoid ? "line-through" : "none"
+    }
+  }, STEMS[l.stemIdx], BRANCHES[l.branchIdx]), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      color: l.isMoving ? "#b3492b" : "#8A8272",
+      fontWeight: l.isMoving ? 700 : 400
+    }
+  }, l.isYang ? "———" : "—　—", l.isMoving ? (l.isYang ? " ○" : " ✕") : ""), l.isShi && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#3F6B7A",
+      fontWeight: 700
+    }
+  }, "世"), l.isYing && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#3F6B7A",
+      fontWeight: 700
+    }
+  }, "應"), l.isVoid && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#A79C86"
+    }
+  }, "空")))));
 }
 
 /* ---------------- Empty state ---------------- */
