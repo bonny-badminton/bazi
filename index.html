@@ -2114,70 +2114,70 @@ function castPlumBlossom(y, m, d, hour, minute) {
 // （古典原文字字皆有精確含義，若僅憑記憶轉述容易出現一兩字之差的誤植，風險較高；
 // 這裡採用的是後世普遍認同的卦義主題，供快速理解一卦的整體基調，非精密逐字訓詁）。
 const HEXAGRAM_MEANING = {
-  1: "剛健自強，充滿創造力與領導力的時機，適合主動出擊、勇於開創，但也要留意過剛則折，行事仍需循序漸進。",
-  2: "柔順包容，以厚德承載萬物，此時宜以順應代替強求，腳踏實地、廣納雅言，成果會在穩健累積中到來。",
-  3: "萬事草創，局勢混沌未明，如同萬物初生的艱難，宜謹慎籌劃、尋求外援，不宜躁進，耐心是度過此階段的關鍵。",
-  4: "蒙昧待啟，如孩童初學，此時需要虛心求教、接受指導，主動釐清狀況比自行摸索更有效率。",
-  5: "等待時機，如同等雲成雨，急不得也躁不得，宜沉穩備妥實力，時機成熟自然水到渠成。",
-  6: "爭訟糾紛，意見分歧容易演變成對立，此時宜謹言慎行、以和為貴，避免把事情鬧大，適可而止方為上策。",
-  7: "統籌調度，如統帥用兵，需要紀律與章法，此時宜建立制度、團結眾人之力，方向明確才能成事。",
-  8: "親近輔佐，講求誠信與團結，此時宜主動與人合作、真誠相待，孤軍奮戰難成大事。",
-  9: "力量尚小，如風吹行雲卻難成雨，此時宜蓄積實力、耐心等待，暫時不宜躁進求成。",
-  10: "步步為營，如履薄冰、如履虎尾，此時處境需格外謹慎小心，態度謙和自能化險為夷。",
-  11: "上下交泰，天地交融、通達順遂，此時是內外和諧、諸事亨通的好階段，宜把握良機、廣結善緣。",
-  12: "閉塞不通，上下不交、局勢停滯，此時宜韜光養晦、靜待轉機，勉強行事容易徒勞無功。",
-  13: "與人同心，志同道合、群策群力，此時宜開誠布公、廣結同盟，團結的力量遠勝單打獨鬥。",
-  14: "大有所獲，光明照耀、豐盛可期，此時運勢旺盛，宜心存謙德、廣施於人，方能長保盛況。",
-  15: "謙遜自持，滿招損、謙受益，此時宜保持低調、不居功自傲，謙德終能贏得長遠的信任與尊重。",
-  16: "怡然歡愉，順勢而為、預先籌謀，此時宜提前規劃、順應時勢，心存喜悅更能感染身邊的人。",
-  17: "隨順時勢，因時制宜、隨機應變，此時宜彈性調整、順勢而為，堅持己見反而容易錯失良機。",
-  18: "整頓積弊，過去累積的問題浮現，此時宜正視根源、著手革新，及早處理能防止問題持續惡化。",
-  19: "居高臨下，德澤廣被、恩澤下施，此時宜以身作則、關照他人，影響力正在擴大的階段。",
-  20: "觀察省思，靜觀其變、以觀化人，此時宜多觀察局勢、反躬自省，而非急於表態或行動。",
-  21: "排除障礙，如咬合噬物般去除阻礙，此時宜果斷處理糾紛或弊病，拖延反而讓問題根深蒂固。",
-  22: "文飾外表，講求儀容與修飾，此時宜適度包裝、注重形象，但也要留意內在實質不可空洞。",
-  23: "剝落衰退，情勢逐漸削弱，此時宜謹守本分、靜待否極泰來，不宜強行對抗大勢。",
-  24: "一陽來復，否極泰來、生機重現，此時是谷底反彈的起點，宜把握新生的契機、重新出發。",
-  25: "順應天理，不妄求、不強取，此時宜秉持正直、順其自然，投機取巧反而招致意外。",
-  26: "蓄養實力，大有積蓄、厚積薄發，此時宜沉潛充實自己，累積的能量將在未來派上用場。",
-  27: "頤養身心，講求飲食與言語的節制，此時宜照顧好自身與他人的根本需求，言行也要謹慎。",
-  28: "力量過度，如棟樑不堪重負，此時處境較為艱難吃緊，宜量力而為、適度求助，避免硬撐。",
-  29: "重重險陷，如陷落於水中，此時處境艱險，宜秉持誠信、步步為營，切勿慌亂行事。",
-  30: "光明依附，如火焰需要依附燃料，此時宜依循正道、借助外部資源，光明磊落方能長久。",
-  31: "以誠相感，男女、上下以真誠相互感應，此時宜主動釋出善意、真心交流，感情與合作皆宜。",
-  32: "恆久不變，持之以恆、堅守正道，此時宜穩定經營、不輕易改弦更張，恆心終將見到成果。",
-  33: "適時退守，見機而退、明哲保身，此時宜懂得取捨、暫避鋒芒，退一步是為了更好的進。",
-  34: "氣勢強盛，陽剛壯盛、銳不可當，此時宜善用氣勢但不逞強冒進，過剛易折，仍需守禮節制。",
-  35: "漸次晉升，如旭日東升、穩步上進，此時運勢向上，宜光明磊落地展現才能，機會正在浮現。",
-  36: "光明受阻，才德被壓抑或誤解，此時宜韜光養晦、內斂鋒芒，靜待撥雲見日的時機。",
-  37: "齊家有道，講求家庭倫理與內部秩序，此時宜先安頓好身邊親近的人事，家和萬事興。",
-  38: "乖違分歧，意見相左、彼此猜疑，此時宜求同存異、耐心溝通，強行統一反而擴大裂痕。",
-  39: "步履維艱，前路多阻、進退兩難，此時宜暫緩腳步、尋求貴人相助，不宜獨自蠻幹。",
-  40: "紓解困境，如冰雪消融、危機解除，此時宜把握鬆綁的契機、儘速收尾，宜速戰速決不宜拖延。",
-  41: "損己利人，減損眼前小利以成就長遠大局，此時宜懂得取捨、犧牲短期換取後續的豐收。",
-  42: "增益成長，上施下益、資源挹注，此時是擴展與投資的好時機，宜把握機會、乘勢而上。",
-  43: "當機立斷，剛健果決、排除小人，此時宜明快決斷、正大光明地處理問題，猶豫反而壞事。",
-  44: "不期而遇，陰柔悄然滋長，此時宜謹慎面對突如其來的人事變化，防微杜漸勝於事後補救。",
-  45: "凝聚匯集，人心與資源聚合，此時宜藉眾人之力共同成事，領導者更需以誠信凝聚向心力。",
-  46: "循序上升，如樹木拔地而起，此時運勢穩步上揚，宜腳踏實地、循序漸進，不宜求速成。",
-  47: "困頓艱難，資源匱乏、身處逆境，此時宜堅守心志、以言辭與行動謹慎自持，度過必見轉機。",
-  48: "資源共享，如井水滋養眾人，此時宜維護根本、廣澤他人，制度與基礎建設是成事的關鍵。",
-  49: "順勢變革，除舊佈新、與時俱進，此時宜果斷革新，但也要師出有名、取信於眾方能成功。",
-  50: "革故鼎新，如鼎烹飪化生為熟，此時宜穩健建立新局、任用賢才，穩重踏實地推動變革。",
-  51: "震動驚醒，突如其來的變化令人警醒，此時宜臨危不亂、保持鎮定，危機也是重新振作的契機。",
-  52: "止而安定，適時停下腳步、安於當下，此時宜靜心自持，不妄動、不強求，方能穩住陣腳。",
-  53: "循序漸進，如雁飛有序，此時宜按部就班、逐步推進，急功躁進反而欲速則不達。",
-  54: "名分不正，處境或關係較為尷尬，此時宜謹守本分、以禮自持，勉強強求名分反招是非。",
-  55: "盛大豐收，如日中天、豐盛可期，此時宜把握榮景、廣結善緣，但也要留意盛極必衰的道理。",
-  56: "羈旅在外，身處異地或過渡階段，此時宜謙和謹慎、與人為善，不宜與人結怨或久留原地。",
-  57: "謙遜順入，如風無孔不入，此時宜以柔軟身段化解阻力，反覆溝通、耐心滲透方能達成目的。",
-  58: "喜悅交流，以誠相悅、彼此激勵，此時宜保持開朗、樂於分享，人際與合作皆能因此順遂。",
-  59: "渙散渙散，人心或局勢趨於離散，此時宜凝聚共識、重建向心力，及早收拾比放任渙散更為明智。",
-  60: "節制有度，講求分寸與界限，此時宜量入為出、適可而止，過度節制或放縱皆非長久之道。",
-  61: "誠信感通，以真誠打動人心，此時宜秉持誠意、言行一致，誠信終能贏得他人的信任與回應。",
-  62: "小心行事，宜守小節、不宜行大事，此時處境較為侷限，凡事宜低調謹慎、量力而行。",
-  63: "功成守成，大事初步底定，此時宜居安思危、謹慎收尾，慎防功成後的鬆懈與反覆。",
-  64: "終而復始，事情尚未圓滿、仍有變數，此時宜謹慎面對未竟之事，耐心收拾殘局、迎接下一個循環。"
+  1: "剛健自強的格局。創造力與領導力都在高點，勇於開創、主動出擊會有回報——但剛過了頭容易折斷，步伐仍要一步一步來。",
+  2: "以柔克剛、以厚德載物。與其硬碰硬，不如順勢而為，腳踏實地、廣納雅言，成果會在日積月累中悄悄成形。",
+  3: "萬事起頭難。局勢還混沌未明，像新生命剛萌芽一樣脆弱，謹慎籌劃、找對幫手比單打獨鬥重要，急不得。",
+  4: "像個初學的孩子，帶著蒙昧與未知。放下身段虛心求教，主動把狀況問清楚，會比自己悶頭摸索快上許多。",
+  5: "時候未到，且等等。如同盼雲成雨，急也急不來，先把實力備妥，時機一到自然水到渠成。",
+  6: "意見分歧，容易演變成對立局面。話別說死、留點餘地，把事情鬧大對誰都沒好處，適可而止才是上策。",
+  7: "需要紀律與章法的時刻，如統帥領兵。建立制度、把眾人的力量團結起來，方向清楚了，事情自然成。",
+  8: "誠信與團結是這時最重要的資產。主動靠近、真誠合作，孤軍奮戰在這個階段很難成事。",
+  9: "力量還小，像風吹雲卻聚不成雨。先蓄積實力、耐住性子，這時候求快反而求不成。",
+  10: "如履薄冰、如履虎尾，處境需要格外小心。態度放軟一點、謙和應對，反而能安然化險為夷。",
+  11: "天地交融、上下通達，是難得的好階段。內外和諧、諸事亨通，把握良機、多結善緣。",
+  12: "上下不交、局勢閉塞停滯。這時候硬闖只會徒勞，不如韜光養晦，靜靜等轉機出現。",
+  13: "志同道合，群策群力。開誠布公、廣結同盟，這時候團結的力量遠勝過一個人單打獨鬥。",
+  14: "光明照耀、豐盛可期，運勢正旺。越是這種時候越要心存謙德、廣施於人，盛況才留得住。",
+  15: "滿招損，謙受益。低調一點、不居功自傲，謙遜換來的信任會走得比一時風光更長久。",
+  16: "順勢而為，提前籌謀，帶著幾分怡然歡愉。心裡先有數、腳步跟著時勢走，喜悅的心情也會感染周圍的人。",
+  17: "因時制宜、隨機應變才是王道。堅持己見在這個階段反而容易錯失良機，彈性一點吧。",
+  18: "過去累積的問題浮上檯面了。與其視而不見，不如正視根源、動手整頓，拖越久積弊越深。",
+  19: "德澤廣被，居高臨下的格局。以身作則、多關照身邊的人，你的影響力正在悄悄擴大。",
+  20: "這是個適合安靜觀察的時刻，不必急著表態或行動。多看看局勢、也回頭看看自己，比貿然出手更有用。",
+  21: "阻礙該除就要除，像咬合噬物一樣果斷。拖延只會讓問題根深蒂固，不如趁早處理。",
+  22: "講求儀容與修飾的階段，適度包裝形象無妨——但別忘了內在的實質，外表終究不能取代根基。",
+  23: "情勢正在逐漸削弱、剝落。硬碰硬對抗大勢並不明智，守住本分、靜待否極泰來才是穩妥的做法。",
+  24: "否極泰來，一陽來復，谷底已經是起點了。把握這個重新出發的契機，生機正在回來的路上。",
+  25: "順其自然，不妄求、不強取。投機取巧在這個階段容易招致意外，正直行事反而走得穩。",
+  26: "厚積薄發的時機，眼下適合沉潛充實自己。現在累積的能量，會在未來派上意想不到的用場。",
+  27: "飲食與言語都該有節制，這是關於頤養身心的階段。照顧好自己與身邊人的根本需求，言行也別太隨性。",
+  28: "力量已經有點過度負荷，像棟樑撐著超出負擔的重量。量力而為、適度找人幫忙，硬撐下去並不划算。",
+  29: "身處險陷之中，如陷落水中一般艱難。誠信與步步為營是這時候的護身符，慌亂行事只會更糟。",
+  30: "光明需要依附燃料才能持續，像火焰一樣。依循正道、借助外部資源，光明磊落才走得長久。",
+  31: "真誠相感，男女、上下都因誠意而心意相通。主動釋出善意、真心交流，感情與合作在此時都很順。",
+  32: "貴在持之以恆。穩定經營、不輕易改弦更張，恆心終究會等到成果現身的那一天。",
+  33: "見機而退，明哲保身的時刻。退一步不是認輸，是為了替下一次的進留出空間。",
+  34: "陽剛壯盛、氣勢銳不可當——但過剛容易折，這時候更需要守住禮節，別讓氣勢變成莽撞。",
+  35: "運勢向上，如旭日東升，步步高升。光明磊落地展現才能，機會正一點一點浮現。",
+  36: "才德一時被壓抑或誤解，光明受阻的階段。收斂鋒芒、韜光養晦，撥雲見日只是時間問題。",
+  37: "家庭倫理與內部秩序是這時的重點。先把身邊親近的人事安頓好，家和了，萬事才有底氣往外拓展。",
+  38: "意見相左，彼此難免猜疑。強行統一立場只會擴大裂痕，求同存異、耐心溝通才是解方。",
+  39: "前路多阻，進退兩難，步履維艱。不妨暫緩腳步、找貴人搭把手，這時候不宜獨自蠻幹。",
+  40: "危機解除，像冰雪消融一樣紓解開來。把握這個鬆綁的契機儘速收尾，速戰速決比拖泥帶水好。",
+  41: "有所減損才能成就長遠大局。眼前的小利放手一點，換來的往往是後續更大的豐收。",
+  42: "資源正在挹注、上施下益，是擴展與投資的好時機。把握機會乘勢而上，這波風向對你有利。",
+  43: "剛健果決、當機立斷，該排除的小人或阻礙別再猶豫。正大光明地處理，拖下去反而壞事。",
+  44: "陰柔悄然滋長，不期而遇的變化正在發生。防微杜漸勝過事後補救，這時候多一分警覺為好。",
+  45: "人心與資源正在凝聚匯合。藉眾人之力共同成事，領導者更要靠誠信把向心力凝聚起來。",
+  46: "運勢穩步上揚，像樹木循序拔地而起。腳踏實地、按部就班，這時候求速成反而欲速不達。",
+  47: "身處逆境、資源匱乏，困頓艱難的階段。守住心志，言行謹慎一點，轉機終會出現。",
+  48: "如井水滋養眾人，重點在資源共享。維護好根本、廣澤他人，制度與基礎建設是這時候成事的關鍵。",
+  49: "除舊佈新、與時俱進，變革的時機到了。果斷革新是對的，但也要師出有名，才能真正取信於眾。",
+  50: "革故鼎新，如鼎烹飪、化生為熟。穩健地建立新局、任用賢才，踏實推動比躁進更靠得住。",
+  51: "突如其來的變化令人一驚，震動驚醒的格局。臨危不亂、保持鎮定，危機往往也是重新振作的契機。",
+  52: "適時停下腳步，安於當下。不妄動、不強求，靜心自持才能真正穩住陣腳。",
+  53: "如雁飛有序，貴在循序漸進。按部就班、逐步推進，這時候急功躁進反而欲速則不達。",
+  54: "處境或關係有點名分不正、略顯尷尬。謹守本分、以禮自持，勉強去爭名分反而招惹是非。",
+  55: "如日中天，盛大豐收可期。把握這波榮景、多結善緣，但也別忘了盛極必衰的老道理。",
+  56: "身處異地或過渡階段，帶著羈旅的漂泊感。謙和謹慎、與人為善，這時候不宜與人結怨或戀棧原地。",
+  57: "柔軟身段能滲透阻力，如風無孔不入。反覆溝通、耐心一點，軟工夫比硬碰硬更容易達成目的。",
+  58: "以誠相悅，彼此激勵的好氛圍。保持開朗、樂於分享，人際與合作在這時候都特別順暢。",
+  59: "人心或局勢正在渙散、趨於離散。及早凝聚共識、重建向心力，總比放任渙散下去要明智得多。",
+  60: "分寸與界限是這時的關鍵詞。量入為出、適可而止，過緊或過鬆都稱不上長久之道。",
+  61: "真誠能打動人心，誠信感通的格局。言行一致、秉持誠意，這份信任終究會換來對等的回應。",
+  62: "宜守小節、不宜行大事，處境較為侷限。這時候凡事低調謹慎、量力而行會比逞強穩妥。",
+  63: "大事初步底定，功成守成的階段。居安思危、謹慎收尾，別讓最後一哩路鬆懈下來。",
+  64: "終而復始，事情還沒真正圓滿、仍有變數。耐心收拾未竟之事，下一個循環正等在後頭。"
 };
 
 /* ============================================================
@@ -2348,6 +2348,169 @@ function dressHexagram(hex, dayStemIdx, dayBranchIdx) {
     voidBranches: [...voidBranches]
   };
 }
+
+/* ============================================================
+   易經占卜（第三階段：用神深度解讀）
+   ------------------------------------------------------------
+   用神對照表：已交叉比對多方獨立來源一致（財運看妻財、工作看官鬼、人際看兄弟、
+   感情依問卦者性別分妻財／官鬼、健康以世爻為用神＋官鬼為忌神參考）。
+   旺衰判斷：採用「旺相休囚死」古法框架（同我者旺、生我者相、我生者休、剋我者囚、我剋者死），
+   以月建為主要基準，日辰與其餘動爻的生剋再做加減，是六爻論卦最基礎、最普遍使用的旺衰評估方式；
+   完整專業論卦另會涉及十二長生、伏神、動爻化爻回頭生剋等更精細技法，這裡先做最核心的一層。
+   ============================================================ */
+const TOPIC_YONGSHEN = {
+  work: {
+    name: "官鬼",
+    label: "工作事業"
+  },
+  money: {
+    name: "妻財",
+    label: "財運"
+  },
+  social: {
+    name: "兄弟",
+    label: "人際關係"
+  },
+  other: {
+    name: null,
+    label: "整體狀況"
+  }
+  // love / health 另外處理（見 pickYongShen）
+};
+// 依提問類型（及必要時的性別）選出這次占卜的用神六親名稱；love 依性別而定，health 以世爻(自己)為用神。
+function pickYongShen(topicKey, gender) {
+  if (topicKey === "love") {
+    const isMale = gender !== "female";
+    return {
+      name: isMale ? "妻財" : "官鬼",
+      label: "感情",
+      note: isMale ? "傳統上男性問感情以「妻財」為用神" : "傳統上女性問感情以「官鬼」為用神"
+    };
+  }
+  if (topicKey === "health") {
+    return {
+      name: null,
+      label: "健康",
+      useSelf: true,
+      note: "問健康以「世爻」（自己）為用神，「官鬼」則代表病灶或不利因素，通常宜靜不宜旺"
+    };
+  }
+  return TOPIC_YONGSHEN[topicKey] || TOPIC_YONGSHEN.other;
+}
+// 在裝好的六爻中找出用神所在的那一爻：若同一六親出現多爻，優先取「世爻／應爻／動爻」上的那一個；
+// 若該六親完全沒有出現在卦中（用神不上卦），回傳 null（由呼叫端另外處理，不勉強套用）。
+function findYongShenLine(dressedLines, liuQinName) {
+  const matches = dressedLines.filter(l => l.liuQin === liuQinName);
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+  const priority = l => (l.isShi ? 3 : 0) + (l.isYing ? 2 : 0) + (l.isMoving ? 1 : 0);
+  return [...matches].sort((a, b) => priority(b) - priority(a))[0];
+}
+// 五行旺相休囚死：以 refElement（月建或日辰的五行）與 targetElement（用神五行）比較。
+function wangXiangStatus(refElement, targetElement) {
+  if (refElement === targetElement) return {
+    tier: "旺",
+    score: 2
+  };
+  if (ELEMENT_GENERATES[refElement] === targetElement) return {
+    tier: "相",
+    score: 1
+  };
+  if (ELEMENT_GENERATES[targetElement] === refElement) return {
+    tier: "休",
+    score: -1
+  };
+  if (ELEMENT_CONTROLS[refElement] === targetElement) return {
+    tier: "囚",
+    score: -1.5
+  };
+  return {
+    tier: "死",
+    score: -2
+  }; // ELEMENT_CONTROLS[targetElement]===refElement
+}
+// 綜合用神所在爻的五行，與月建、日辰、其餘動爻的生剋關係，算出旺衰評分（換算 1-5 分）與逐項明細。
+function assessYongShen(yongShenLine, monthBranchIdx, dayBranchIdx, dressedLines) {
+  const targetElement = yongShenLine.element;
+  const monthElement = BRANCH_ELEMENT[monthBranchIdx];
+  const dayElement = BRANCH_ELEMENT[dayBranchIdx];
+  const monthStatus = wangXiangStatus(monthElement, targetElement);
+  const dayStatus = wangXiangStatus(dayElement, targetElement);
+  let score = monthStatus.score + dayStatus.score * 0.6; // 月建為主、日辰為輔，權重略低
+  const movingEffects = [];
+  dressedLines.forEach(l => {
+    if (!l.isMoving || l.pos === yongShenLine.pos) return; // 用神自己是否動爻另外處理，這裡只看「其他」動爻對用神的影響
+    if (l.element === targetElement) {
+      score += 0.5;
+      movingEffects.push({
+        pos: l.pos,
+        liuQin: l.liuQin,
+        effect: "比助",
+        delta: 0.5
+      });
+    } else if (ELEMENT_GENERATES[l.element] === targetElement) {
+      score += 0.8;
+      movingEffects.push({
+        pos: l.pos,
+        liuQin: l.liuQin,
+        effect: "生扶",
+        delta: 0.8
+      });
+    } else if (ELEMENT_CONTROLS[l.element] === targetElement) {
+      score -= 1;
+      movingEffects.push({
+        pos: l.pos,
+        liuQin: l.liuQin,
+        effect: "剋制",
+        delta: -1
+      });
+    } else if (ELEMENT_GENERATES[targetElement] === l.element) {
+      score -= 0.4;
+      movingEffects.push({
+        pos: l.pos,
+        liuQin: l.liuQin,
+        effect: "洩耗",
+        delta: -0.4
+      });
+    }
+  });
+  if (yongShenLine.isMoving) {
+    // 用神自己是動爻：化出的新爻若生用神原本的五行為佳，剋則不利（僅作簡化提示，不逐一展開化爻五行）
+    movingEffects.push({
+      pos: yongShenLine.pos,
+      liuQin: yongShenLine.liuQin,
+      effect: "用神自身為動爻，直接牽動變化",
+      delta: 0
+    });
+  }
+  if (yongShenLine.isVoid) {
+    score -= 1;
+  }
+  const finalScore = Math.max(1, Math.min(5, Math.round(3 + score / 2)));
+  return {
+    monthStatus,
+    dayStatus,
+    movingEffects,
+    isVoid: yongShenLine.isVoid,
+    score: finalScore
+  };
+}
+// 產生白話總結文字。
+function yongShenNarrative(topicLabel, yongShenLine, assessment, note) {
+  const parts = [];
+  if (note) parts.push(note);
+  parts.push(`用神「${yongShenLine.liuQin}」落在第${yongShenLine.pos}爻（${STEMS[yongShenLine.stemIdx]}${BRANCHES[yongShenLine.branchIdx]}${yongShenLine.element}）`);
+  parts.push(`對月建為「${assessment.monthStatus.tier}」，對日辰為「${assessment.dayStatus.tier}」`);
+  if (assessment.isVoid) parts.push("此爻恰逢旬空，力量暫時虛浮、較難發揮實際作用");
+  if (assessment.movingEffects.length) {
+    const effectTexts = assessment.movingEffects.filter(e => e.delta !== 0).map(e => `第${e.pos}爻(${e.liuQin})對用神形成「${e.effect}」`);
+    if (effectTexts.length) parts.push(effectTexts.join("；"));
+  }
+  const tierText = assessment.score >= 4 ? "整體用神偏旺，這件事目前的條件與能量是站在有利的一方，適合積極把握" : assessment.score <= 2 ? "整體用神偏弱，這件事目前條件較不充足，宜謹慎行事、耐心等待轉強的時機" : "整體用神旺衰中等，這件事目前處於平穩狀態，成敗仍取決於後續發展與應對方式";
+  parts.push(tierText);
+  return parts.join("；") + "。";
+}
+
 
 
 /* ---------------- 紫微斗數：星曜解讀與運勢評分（本命深度解讀＋流日/流年/大限共用） ----------------
@@ -4660,11 +4823,24 @@ function BaziApp() {
       const dayJDN = toJDN(now.getFullYear(), now.getMonth() + 1, now.getDate());
       const day = dayGanZhiFromJDN(dayJDN);
       const dressed = dressHexagram(hex, day.stemIdx, day.branchIdx);
+      const baziNow = computeBazi(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes());
+      const monthBranchIdx = baziNow.month.branchIdx;
+      const linkedProfile = divLinked && divPersonId ? profiles.find(p => p.id === divPersonId) : null;
+      const yongShen = pickYongShen(divTopic, linkedProfile ? linkedProfile.gender : undefined);
+      const yongShenLine = yongShen.useSelf ? dressed.lines.find(l => l.isShi) : yongShen.name ? findYongShenLine(dressed.lines, yongShen.name) : null;
+      const yongShenResult = yongShenLine ? {
+        line: yongShenLine,
+        assessment: assessYongShen(yongShenLine, monthBranchIdx, day.branchIdx, dressed.lines),
+        label: yongShen.label,
+        note: yongShen.note
+      } : null;
       setYijingResult({
         ...hex,
         dayStemIdx: day.stemIdx,
         dayBranchIdx: day.branchIdx,
-        dressed
+        monthBranchIdx,
+        dressed,
+        yongShenResult
       });
     }
   }, "開始起卦"), /*#__PURE__*/React.createElement("button", {
@@ -4698,7 +4874,43 @@ function BaziApp() {
     isWide: isWide
   }), /*#__PURE__*/React.createElement("p", {
     style: styles.subBlockText
-  }, HEXAGRAM_MEANING[yijingResult.number])), yijingResult.dressed && /*#__PURE__*/React.createElement("div", {
+  }, HEXAGRAM_MEANING[yijingResult.number])), yijingResult.yongShenResult ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "用神分析・", yijingResult.yongShenResult.label), /*#__PURE__*/React.createElement(StarScore, {
+    score: yijingResult.yongShenResult.assessment.score
+  })), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, yongShenNarrative(yijingResult.yongShenResult.label, yijingResult.yongShenResult.line, yijingResult.yongShenResult.assessment, yijingResult.yongShenResult.note))) : divTopic === "other" ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "用神分析"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "這次問的是整體狀況，沒有指定特定六親作為用神，可直接參考本卦卦義，並留意「世」（自己）與「應」（對方或所問之事）在裝卦明細裡的生剋關係作為輔助判斷。")) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "用神分析"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, "此次對應的用神六親沒有出現在卦中（用神不上卦），依簡化規則暫不強行推算伏神，建議可以換個角度重新提問，或稍後重新起卦一次。")), yijingResult.dressed && /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.card,
       marginTop: 12
