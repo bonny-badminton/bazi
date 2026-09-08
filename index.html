@@ -2110,6 +2110,166 @@ function castPlumBlossom(y, m, d, hour, minute) {
     totalSum
   };
 }
+// 銅錢卦（互動版）：使用者每輪依序點擊三枚銅錢，一次只決定一枚的正反，
+// 逐輪疊出六爻，跟一次性 Math.random() 六輪相比多了「使用者親手一枚一枚擲出」的操作過程；
+// 陽陰、動爻的判斷規則與 castCoinToss() 完全相同，只是資料來源改為使用者點擊時各自獨立的隨機結果。
+// rounds: 長度6的陣列，每個元素是長度3的布林陣列（true=字面/陽面=3，false=花面/陰面=2）。
+function buildCoinHexagramFromFlips(rounds) {
+  const lines = [];
+  const movingPositions = [];
+  rounds.forEach((round, i) => {
+    const sum = round.reduce((s, isYang) => s + (isYang ? 3 : 2), 0);
+    const isYang = sum === 7 || sum === 9;
+    lines.push(isYang ? 1 : 0);
+    if (sum === 6 || sum === 9) movingPositions.push(i + 1);
+  });
+  const lowerVal = lines[2] | lines[1] << 1 | lines[0] << 2;
+  const upperVal = lines[5] | lines[4] << 1 | lines[3] << 2;
+  return buildHexagram(upperVal, lowerVal, movingPositions);
+}
+// 梅花易數・數字起卦：使用者心中默想後依序點選兩個數字（第一數／第二數），
+// 上卦＝第一數除8取餘數、下卦＝第二數除8取餘數、動爻＝兩數之和除6取餘數，餘0則分別視為8、8、6，
+// 這是《梅花易數》本身固有的正統起卦法之一（與時間起卦、物象起卦並列），
+// 差別只在於「數字從哪裡來」：這裡改由使用者當下自主點選、而非用起卦時刻的年月日時推算。
+function castPlumNumber(num1, num2) {
+  const upperVal = (8 - num1 % 8) % 8;
+  const lowerVal = (8 - num2 % 8) % 8;
+  const sum = num1 + num2;
+  const movingLine = (sum - 1) % 6 + 1;
+  const hex = buildHexagram(upperVal, lowerVal, [movingLine]);
+  return {
+    ...hex,
+    plumNumbers: {
+      num1,
+      num2,
+      sum
+    }
+  };
+}
+// 梅花易數・物象起卦（簡化實作）：使用者寫下當下浮現的字句或看到的物品，
+// 以「字數」作為上卦之數、「全部字元的 Unicode 編碼加總」作為下卦之數、兩者相加作為動爻之數，
+// 換算規則與數字起卦相同（除8 / 除6取餘數）。這是古法「觀物取數、以物象起卦」精神的現代簡化版：
+// 傳統上會另外查閱物件的五行筆畫對照表，這裡改用文字本身的字數與內容特徵取代，
+// 好處是任何輸入的字句都能穩定換算、且同一句話必定對應同一組卦，但嚴格來說不等同逐字查表的古法，介面上會註明。
+function castPlumObjectText(text) {
+  const chars = Array.from((text || "").trim());
+  const charCount = chars.length || 1;
+  const codeSum = chars.reduce((s, ch) => s + ch.codePointAt(0), 0) || charCount;
+  const upperVal = (8 - charCount % 8) % 8;
+  const lowerVal = (8 - codeSum % 8) % 8;
+  const sum = charCount + codeSum;
+  const movingLine = (sum - 1) % 6 + 1;
+  const hex = buildHexagram(upperVal, lowerVal, [movingLine]);
+  return {
+    ...hex,
+    plumObject: {
+      text: chars.join(""),
+      charCount,
+      codeSum
+    }
+  };
+}
+// 八卦性質白話對照（沿用檔案既有的 TRIGRAM_INFO 陣列，index 0-7 = 坤艮坎巽震離兌乾，與 upperVal/lowerVal 同一套編碼），
+// 供結果頁組合「上卦＋下卦」的白話卦德說明使用。
+const TRIGRAM_TRAIT_BY_NAME = {
+  "乾": "剛健",
+  "兌": "喜悅",
+  "離": "光明",
+  "震": "動起",
+  "巽": "順入",
+  "坎": "險陷",
+  "艮": "止定",
+  "坤": "柔順"
+};
+// 上下卦組合的白話卦德說明：上卦多半對應外在環境／他人／事情表面的走向，
+// 下卦則貼近內在心境／自身條件／事情的根基，兩者合看能補足單看卦名時容易忽略的結構性訊息。
+function trigramCombinationNarrative(upperVal, lowerVal) {
+  const up = {
+    ...TRIGRAM_INFO[upperVal],
+    trait: TRIGRAM_TRAIT_BY_NAME[TRIGRAM_INFO[upperVal].name]
+  };
+  const low = {
+    ...TRIGRAM_INFO[lowerVal],
+    trait: TRIGRAM_TRAIT_BY_NAME[TRIGRAM_INFO[lowerVal].name]
+  };
+  const tail = up.name === low.name ? `上下皆為「${up.name}」，代表這股「${up.trait}」的力道由內而外一致貫通，格局比較單純、不必想得太複雜。` : `外在偏向「${up.trait}」、內在偏向「${low.trait}」，兩股不同的力道交織在一起，才是這一卦真正要拿捏分寸的地方。`;
+  return `這一卦由上卦「${up.name}」（象徵${up.nature}，性質${up.trait}）與下卦「${low.name}」（象徵${low.nature}，性質${low.trait}）組成。上卦多半代表外在環境、他人或事情表面的走向，下卦則貼近你的內在心境、自身條件或事情的根基：${tail}`;
+}
+// 提問類型的敘事框架，讓同一支卦在不同提問類型下讀出「切身」的角度，而不只是套用同一段通用卦義。
+const TOPIC_NARRATIVE_FRAME = {
+  work: { angle: "在工作或事業決策上" },
+  love: { angle: "在感情關係的發展上" },
+  money: { angle: "在財務或金錢往來上" },
+  health: { angle: "在身體狀況與生活作息上" },
+  social: { angle: "在人際互動與合作關係上" },
+  other: { angle: "在整體運勢與現況上" }
+};
+// 分類別解讀：把卦義收斂到使用者實際選擇的提問類型，並視用神旺衰給出對應的行動建議，
+// 而不是不論問什麼都輸出同一段「本卦白話卦義」。
+function topicSpecificNarrative(topicKey, hexNumber, yongShenResult) {
+  const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
+  const base = HEXAGRAM_MEANING[hexNumber];
+  let tail = "";
+  if (yongShenResult) {
+    const score = yongShenResult.assessment.score;
+    if (score >= 4) {
+      tail = `搭配這次「${yongShenResult.label}」用神偏旺的態勢來看，${frame.angle}算是站在比較有利的位置，可以稍微主動一點去推進。`;
+    } else if (score <= 2) {
+      tail = `不過這次「${yongShenResult.label}」用神偏弱，${frame.angle}目前的底氣還不夠足，建議先穩住基本盤、別急著擴大動作，等旺相再出手。`;
+    } else {
+      tail = `這次「${yongShenResult.label}」用神旺衰居中，${frame.angle}屬於「一半靠自己準備、一半看時機」的狀態，多觀察一陣子再行動會比較踏實。`;
+    }
+  }
+  return `${frame.angle}，${base}${tail}`;
+}
+// 六爻爻位通論：不論哪一卦，初爻到上爻在《易經》體系裡各自代表事情發展的哪個階段／位置，
+// 是與具體卦名無關、獨立成立的傳統爻位理論，用來解釋「這一爻動代表變化正發生在哪個層次」。
+const LINE_POSITION_MEANING = {
+  1: "初爻在卦的最底層，代表事情剛起步、根基尚淺的階段。這裡動爻，意味著變化正從最基礎的地方開始醞釀，行動前更需要把基本功站穩，操之過急容易站不住腳。",
+  2: "二爻居於下卦之中，多半對應基層位置或身邊親近的人事，性質柔順得中。這裡動爻，變化往往與日常應對、身邊的人有關，宜用柔軟務實的方式因應，而不是硬碰硬。",
+  3: "三爻處在下卦最上、上卦未到之際，是新舊交替、進退未定的位置，古來多視為多憂多凶之地。這裡動爻，代表變化伴隨著波折與躁動，行事要格外謹慎，避免衝動躁進。",
+  4: "四爻剛跨入上卦，貼近尊位卻仍需戒慎，古稱「近君多懼」。這裡動爻，變化常牽涉到上級、外部環境或關鍵的轉折點，宜謹言慎行，留意分寸與時機。",
+  5: "五爻居上卦之中，是全卦最尊貴、最具主導力的位置。這裡動爻，代表變化的主動權多半握在你或關鍵人物手中，是採取行動、拍板定案的好時機。",
+  6: "上爻在卦的最頂端，代表事情發展到極致、盛極而衰的階段。這裡動爻，提醒變化已接近尾聲或臨界點，宜見好就收、預留轉圜餘地，而不是繼續加碼下去。"
+};
+// 本卦→變卦的過程解讀：把「現在」與「動爻牽引出的下一步」串成一段完整的敘事，
+// 並附上具體一點的行動提醒，取代先前只有一句通用提示的作法。
+function hexTransitionNarrative(fromName, fromNumber, toName, toNumber) {
+  return `本卦「${fromName}」說的是現在——${HEXAGRAM_MEANING[fromNumber]}變卦「${toName}」則是動爻牽引之後，事情可能演變成的下一階段——${HEXAGRAM_MEANING[toNumber]}實務上可以這樣用：先照本卦的格局應對眼前的狀況，同時把變卦當作接下來調整方向的參考座標；兩者合看，會比只看單一卦更能掌握「現在該怎麼做」與「之後要往哪裡走」這兩個層次的問題。`;
+}
+// 結果頁頂端的「起卦依據」摘要：三種起卦方式各自秀出使用者實際操作留下的紀錄
+// （銅錢的字花組合／點選的兩個數字／輸入的字句），讓三種結果一眼就能看出是怎麼算出來的，彼此不會混淆。
+function castOriginBanner(result) {
+  if (result.castMethod === "coin") {
+    return {
+      icon: "🪙",
+      title: "銅錢卦・六輪擲筊",
+      desc: "以你六輪親手擲出的正反面組成本卦，最貼近傳統文王卦「一枚一枚擲」的直覺。"
+    };
+  }
+  if (result.castMethod === "plum-number") {
+    const {
+      num1,
+      num2
+    } = result.plumNumbers || {};
+    return {
+      icon: "🔢",
+      title: "梅花易數・數字起卦",
+      desc: `依你點選的數字「${num1}」與「${num2}」換算成卦，取的是當下心念浮現之數。`
+    };
+  }
+  if (result.castMethod === "plum-object") {
+    const {
+      text
+    } = result.plumObject || {};
+    return {
+      icon: "🍃",
+      title: "梅花易數・物象起卦",
+      desc: `以你寫下的「${text}」換算成卦，取的是當下所見所感之象。`
+    };
+  }
+  return null;
+}
 // 64卦白話卦義：以現代語言概述每一卦的核心主題與處世提醒，不逐字引用古典卦辭／爻辭原文
 // （古典原文字字皆有精確含義，若僅憑記憶轉述容易出現一兩字之差的誤植，風險較高；
 // 這裡採用的是後世普遍認同的卦義主題，供快速理解一卦的整體基調，非精密逐字訓詁）。
@@ -4112,6 +4272,48 @@ function BaziApp() {
   const [divDuration, setDivDuration] = useState(null);
   const [yijingMethod, setYijingMethod] = useState(null); // "coin" | "plum"
   const [yijingResult, setYijingResult] = useState(null);
+  const [plumMode, setPlumMode] = useState(null); // "number" | "object"（梅花易數的起卦依據）
+  const [coinRounds, setCoinRounds] = useState([]); // 銅錢卦：已完成的輪次，每輪為[字/花,字/花,字/花]
+  const [coinCurrentRound, setCoinCurrentRound] = useState([]); // 銅錢卦：目前這輪已擲的銅錢
+  const [plumNumPick, setPlumNumPick] = useState([]); // 梅花數字起卦：使用者依序點選的兩個數字
+  const [plumText, setPlumText] = useState(""); // 梅花物象起卦：使用者輸入的字句／物品
+  const resetYijingCastState = () => {
+    setYijingMethod(null);
+    setYijingResult(null);
+    setPlumMode(null);
+    setCoinRounds([]);
+    setCoinCurrentRound([]);
+    setPlumNumPick([]);
+    setPlumText("");
+  };
+  // 統一收尾：不論用哪一種方式起出本卦(hex)，都套用同一套裝卦／用神／日辰邏輯，
+  // 確保銅錢卦、梅花數字起卦、梅花物象起卦三者的「解讀深度」一致，只有「起卦依據」不同。
+  const finalizeHexagram = (hex, extra) => {
+    const now = new Date();
+    const dayJDN = toJDN(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    const day = dayGanZhiFromJDN(dayJDN);
+    const dressed = dressHexagram(hex, day.stemIdx, day.branchIdx);
+    const baziNow = computeBazi(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes());
+    const monthBranchIdx = baziNow.month.branchIdx;
+    const linkedProfile = divLinked && divPersonId ? profiles.find(p => p.id === divPersonId) : null;
+    const yongShen = pickYongShen(divTopic, linkedProfile ? linkedProfile.gender : undefined);
+    const yongShenLine = yongShen.useSelf ? dressed.lines.find(l => l.isShi) : yongShen.name ? findYongShenLine(dressed.lines, yongShen.name) : null;
+    const yongShenResult = yongShenLine ? {
+      line: yongShenLine,
+      assessment: assessYongShen(yongShenLine, monthBranchIdx, day.branchIdx, dressed.lines),
+      label: yongShen.label,
+      note: yongShen.note
+    } : null;
+    setYijingResult({
+      ...hex,
+      ...extra,
+      dayStemIdx: day.stemIdx,
+      dayBranchIdx: day.branchIdx,
+      monthBranchIdx,
+      dressed,
+      yongShenResult
+    });
+  };
   const isWide = useIsWide();
   const goHome = () => setRoute("home");
   const routeLabel = {
@@ -4803,47 +5005,81 @@ function BaziApp() {
     style: styles.bigCardName
   }, "梅花易數"), /*#__PURE__*/React.createElement("div", {
     style: styles.bigCardSub
-  }, "以起卦當下的年月日時換算成卦，同一時刻起卦結果固定，取的是當下時空之象"), /*#__PURE__*/React.createElement("div", {
+  }, "自己選擇數字或物象作為起卦依據，同樣的輸入必定對應同一支卦，取的是當下心念之象"), /*#__PURE__*/React.createElement("div", {
     style: styles.bigCardArrow
   }, "›")))),
-  // 畫面二：確認起卦（尚未按下起卦鍵）
-  yijingMethod && !yijingResult && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  // 畫面二‧銅錢卦：逐輪點擊三枚銅錢，親手擲出六爻
+  yijingMethod === "coin" && !yijingResult && h(React.Fragment, null, h("div", {
     style: styles.resultCard
-  }, /*#__PURE__*/React.createElement("div", {
+  }, h("div", {
     style: styles.resultIcon
-  }, yijingMethod === "coin" ? "🪙" : "🌸"), /*#__PURE__*/React.createElement("div", {
+  }, "🪙"), h("div", {
     style: styles.resultTitle
-  }, yijingMethod === "coin" ? "銅錢卦" : "梅花易數"), /*#__PURE__*/React.createElement("div", {
+  }, "銅錢卦・依序擲筊"), h("div", {
     style: styles.resultDesc
-  }, "誠心默想你想問的事，準備好之後點選下方開始起卦。")), /*#__PURE__*/React.createElement("button", {
-    style: styles.primaryBtnFull,
-    onClick: () => {
-      const now = new Date();
-      const hex = yijingMethod === "coin" ? castCoinToss() : castPlumBlossom(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes());
-      const dayJDN = toJDN(now.getFullYear(), now.getMonth() + 1, now.getDate());
-      const day = dayGanZhiFromJDN(dayJDN);
-      const dressed = dressHexagram(hex, day.stemIdx, day.branchIdx);
-      const baziNow = computeBazi(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes());
-      const monthBranchIdx = baziNow.month.branchIdx;
-      const linkedProfile = divLinked && divPersonId ? profiles.find(p => p.id === divPersonId) : null;
-      const yongShen = pickYongShen(divTopic, linkedProfile ? linkedProfile.gender : undefined);
-      const yongShenLine = yongShen.useSelf ? dressed.lines.find(l => l.isShi) : yongShen.name ? findYongShenLine(dressed.lines, yongShen.name) : null;
-      const yongShenResult = yongShenLine ? {
-        line: yongShenLine,
-        assessment: assessYongShen(yongShenLine, monthBranchIdx, day.branchIdx, dressed.lines),
-        label: yongShen.label,
-        note: yongShen.note
-      } : null;
-      setYijingResult({
-        ...hex,
-        dayStemIdx: day.stemIdx,
-        dayBranchIdx: day.branchIdx,
-        monthBranchIdx,
-        dressed,
-        yongShenResult
-      });
+  }, "誠心默想你想問的事，接著依序點擊銅錢，親手擲出的每一枚都會決定卦象。")), h("div", {
+    style: styles.card
+  }, h(CoinTossPad, {
+    rounds: coinRounds,
+    current: coinCurrentRound,
+    onFlip: () => {
+      const isYang = Math.random() < 0.5;
+      const next = [...coinCurrentRound, isYang];
+      if (next.length < 3) {
+        setCoinCurrentRound(next);
+        return;
+      }
+      const newRounds = [...coinRounds, next];
+      setCoinCurrentRound([]);
+      setCoinRounds(newRounds);
+      if (newRounds.length === 6) {
+        finalizeHexagram(buildCoinHexagramFromFlips(newRounds), {
+          castMethod: "coin",
+          coinRounds: newRounds
+        });
+      }
     }
-  }, "開始起卦"), /*#__PURE__*/React.createElement("button", {
+  })), h("button", {
+    style: {
+      ...styles.homeBackBtn,
+      marginTop: 10,
+      width: "100%",
+      justifyContent: "center"
+    },
+    onClick: () => {
+      setYijingMethod(null);
+      setCoinRounds([]);
+      setCoinCurrentRound([]);
+    }
+  }, "換一種起卦方式")),
+  // 畫面二‧梅花易數：先選這次要用「數字」還是「物象」作為起卦依據
+  yijingMethod === "plum" && !plumMode && !yijingResult && h(React.Fragment, null, h("div", {
+    style: styles.desc
+  }, "選擇這次梅花易數要用的起卦依據。"), h("div", {
+    style: styles.bigChoiceWrap
+  }, h("div", {
+    style: styles.bigCardM,
+    onClick: () => setPlumMode("number")
+  }, h("div", {
+    style: styles.bigCardIcon
+  }, "🔢"), h("div", {
+    style: styles.bigCardName
+  }, "數字起卦"), h("div", {
+    style: styles.bigCardSub
+  }, "心中默想兩個數字，依序點選，用數字換算卦象——梅花易數本有的正統起法"), h("div", {
+    style: styles.bigCardArrow
+  }, "›")), h("div", {
+    style: styles.bigCardZ,
+    onClick: () => setPlumMode("object")
+  }, h("div", {
+    style: styles.bigCardIcon
+  }, "🍃"), h("div", {
+    style: styles.bigCardName
+  }, "物象起卦"), h("div", {
+    style: styles.bigCardSub
+  }, "寫下此刻浮現的字句或看到的物品，取當下感應之象換算成卦"), h("div", {
+    style: styles.bigCardArrow
+  }, "›"))), h("button", {
     style: {
       ...styles.homeBackBtn,
       marginTop: 10,
@@ -4852,8 +5088,99 @@ function BaziApp() {
     },
     onClick: () => setYijingMethod(null)
   }, "換一種起卦方式")),
+  // 畫面二‧梅花易數／數字起卦：依序點選兩個數字
+  yijingMethod === "plum" && plumMode === "number" && !yijingResult && h(React.Fragment, null, h("div", {
+    style: styles.resultCard
+  }, h("div", {
+    style: styles.resultIcon
+  }, "🔢"), h("div", {
+    style: styles.resultTitle
+  }, "梅花易數・數字起卦"), h("div", {
+    style: styles.resultDesc
+  }, "誠心默想你想問的事，接著憑直覺點選浮現腦海的兩個數字。")), h("div", {
+    style: styles.card
+  }, h(PlumNumberPad, {
+    stage: plumNumPick.length + 1,
+    num1: plumNumPick[0],
+    onPick: n => {
+      const next = [...plumNumPick, n];
+      setPlumNumPick(next);
+      if (next.length === 2) {
+        finalizeHexagram(castPlumNumber(next[0], next[1]), {
+          castMethod: "plum-number"
+        });
+      }
+    }
+  })), h("button", {
+    style: {
+      ...styles.homeBackBtn,
+      marginTop: 10,
+      width: "100%",
+      justifyContent: "center"
+    },
+    onClick: () => {
+      setPlumMode(null);
+      setPlumNumPick([]);
+    }
+  }, "換一種起卦依據")),
+  // 畫面二‧梅花易數／物象起卦：輸入字句或物品
+  yijingMethod === "plum" && plumMode === "object" && !yijingResult && h(React.Fragment, null, h("div", {
+    style: styles.resultCard
+  }, h("div", {
+    style: styles.resultIcon
+  }, "🍃"), h("div", {
+    style: styles.resultTitle
+  }, "梅花易數・物象起卦"), h("div", {
+    style: styles.resultDesc
+  }, "誠心默想你想問的事，寫下此刻心裡浮現的字句或看到的物品。")), h("div", {
+    style: styles.card
+  }, h(PlumObjectInput, {
+    value: plumText,
+    onChange: setPlumText,
+    onSubmit: text => finalizeHexagram(castPlumObjectText(text), {
+      castMethod: "plum-object"
+    })
+  })), h("button", {
+    style: {
+      ...styles.homeBackBtn,
+      marginTop: 10,
+      width: "100%",
+      justifyContent: "center"
+    },
+    onClick: () => {
+      setPlumMode(null);
+      setPlumText("");
+    }
+  }, "換一種起卦依據")),
   // 畫面三：本卦／變卦結果
-  yijingResult && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  yijingResult && /*#__PURE__*/React.createElement(React.Fragment, null, (() => {
+    const origin = castOriginBanner(yijingResult);
+    return origin && h("div", {
+      style: {
+        ...styles.card,
+        marginBottom: 12,
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, h("div", {
+      style: {
+        fontSize: 24
+      }
+    }, origin.icon), h("div", null, h("div", {
+      style: {
+        fontWeight: 800,
+        fontSize: 13.5,
+        marginBottom: 2
+      }
+    }, origin.title), h("div", {
+      style: {
+        fontSize: 11.5,
+        color: "#8A8272",
+        lineHeight: 1.6
+      }
+    }, origin.desc)));
+  })(), /*#__PURE__*/React.createElement("div", {
     style: styles.card
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4874,7 +5201,23 @@ function BaziApp() {
     isWide: isWide
   }), /*#__PURE__*/React.createElement("p", {
     style: styles.subBlockText
-  }, HEXAGRAM_MEANING[yijingResult.number])), yijingResult.yongShenResult ? /*#__PURE__*/React.createElement("div", {
+  }, HEXAGRAM_MEANING[yijingResult.number]), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8,
+      paddingTop: 8,
+      borderTop: "1px solid rgba(58,50,38,0.08)"
+    }
+  }, trigramCombinationNarrative(yijingResult.upperVal, yijingResult.lowerVal))), divTopic && /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "貼近你的提問"), /*#__PURE__*/React.createElement("p", {
+    style: styles.subBlockText
+  }, topicSpecificNarrative(divTopic, yijingResult.number, yijingResult.yongShenResult))), yijingResult.yongShenResult ? /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.card,
       marginTop: 12
@@ -4910,7 +5253,20 @@ function BaziApp() {
     style: styles.subBlockTitle
   }, "用神分析"), /*#__PURE__*/React.createElement("p", {
     style: styles.subBlockText
-  }, "此次對應的用神六親沒有出現在卦中（用神不上卦），依簡化規則暫不強行推算伏神，建議可以換個角度重新提問，或稍後重新起卦一次。")), yijingResult.dressed && /*#__PURE__*/React.createElement("div", {
+  }, "此次對應的用神六親沒有出現在卦中（用神不上卦），依簡化規則暫不強行推算伏神，建議可以換個角度重新提問，或稍後重新起卦一次。")), yijingResult.movingPositions.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...styles.card,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: styles.subBlockTitle
+  }, "動爻解讀"), yijingResult.movingPositions.map(pos => /*#__PURE__*/React.createElement("p", {
+    key: pos,
+    style: {
+      ...styles.subBlockText,
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("b", null, "第", pos, "爻（", "初二三四五上"[pos - 1], "爻）動："), LINE_POSITION_MEANING[pos]))), yijingResult.dressed && /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.card,
       marginTop: 12
@@ -4931,16 +5287,22 @@ function BaziApp() {
     isWide: isWide
   }), /*#__PURE__*/React.createElement("p", {
     style: styles.subBlockText
-  }, HEXAGRAM_MEANING[yijingResult.changed.number])), /*#__PURE__*/React.createElement("div", {
+  }, HEXAGRAM_MEANING[yijingResult.changed.number]), /*#__PURE__*/React.createElement("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 8,
+      paddingTop: 8,
+      borderTop: "1px solid rgba(58,50,38,0.08)"
+    }
+  }, hexTransitionNarrative(yijingResult.name, yijingResult.number, yijingResult.changed.name, yijingResult.changed.number))), /*#__PURE__*/React.createElement("div", {
     style: styles.ziweiNote
-  }, "本卦代表事情目前的狀態與基本格局；", yijingResult.changed ? "動爻是變化的關鍵，變卦則代表事情接下來可能演變的方向，兩者合看更完整。" : "六爻皆不動，代表狀態穩定，可直接以本卦的卦義作為參考。", "六爻明細裡「世」代表問卦的自己、「應」代表對方或所問之事，兩者的生剋關係是判斷吉凶的重要依據；「空」（旬空）代表該爻力量暫時虛浮、較難發揮作用；哪個六親對應你實際想問的事（例如問財運看妻財、問工作看官鬼），需要依提問類型自動判斷用神旺衰，規劃於下一階段補上。"), /*#__PURE__*/React.createElement("button", {
+  }, yijingResult.changed ? "本卦代表事情目前的狀態與基本格局，變卦代表動爻牽引之後可能演變的方向，兩者合看更完整。" : "六爻皆不動，代表狀態穩定，可直接以本卦的卦義作為參考，不必另外套用變卦。", "六爻明細裡「世」代表問卦的自己、「應」代表對方或所問之事，兩者的生剋關係是判斷吉凶的重要依據；「空」（旬空）代表該爻力量暫時虛浮、較難發揮作用。"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...styles.primaryBtnFull,
       marginTop: 12
     },
     onClick: () => {
-      setYijingMethod(null);
-      setYijingResult(null);
+      resetYijingCastState();
     }
   }, "重新起卦")), /*#__PURE__*/React.createElement("button", {
     style: {
@@ -4955,8 +5317,7 @@ function BaziApp() {
       setDivPersonId(null);
       setDivTopic(null);
       setDivDuration(null);
-      setYijingMethod(null);
-      setYijingResult(null);
+      resetYijingCastState();
       setRoute("div-tool");
     }
   }, "問別的事情")), showForm && /*#__PURE__*/React.createElement(ProfileForm, {
@@ -4982,6 +5343,145 @@ function BaziApp() {
 }
 
 /* ---------------- 易經：六爻圖形 ---------------- */
+/* ---------------- 易經：銅錢卦互動擲筊面板 ---------------- */
+function CoinTossPad({
+  rounds,
+  current,
+  onFlip
+}) {
+  const roundIndex = rounds.length; // 0-5
+  const finished = rounds.length >= 6;
+  const slots = [0, 1, 2].map(i => {
+    const flipped = i < current.length;
+    const clickable = !flipped && !finished && i === current.length;
+    return h("div", {
+      key: i,
+      onClick: clickable ? onFlip : undefined,
+      style: {
+        width: 60,
+        height: 60,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 20,
+        fontWeight: 800,
+        fontFamily: '"Noto Serif TC","Songti TC",serif',
+        border: clickable ? "2px solid #7A5A3F" : "2px solid rgba(58,50,38,0.14)",
+        background: flipped ? current[i] ? "linear-gradient(135deg,#E8C87A,#C9A055)" : "linear-gradient(135deg,#DCD6C8,#B0A890)" : "#FFFFFF",
+        color: flipped ? "#4A3B1E" : "#8A8272",
+        boxShadow: flipped ? "0 2px 6px rgba(122,90,63,0.25)" : "none",
+        cursor: clickable ? "pointer" : "default",
+        transition: "all .2s"
+      }
+    }, flipped ? current[i] ? "字" : "花" : "?");
+  });
+  return h("div", null, h("div", {
+    style: {
+      fontSize: 12,
+      color: "#8A8272",
+      marginBottom: 4,
+      textAlign: "center"
+    }
+  }, finished ? "六輪已完成，正在整理卦象…" : `第 ${roundIndex + 1} / 6 輪　·　依序點擊三枚銅錢`), h("div", {
+    style: {
+      display: "flex",
+      gap: 14,
+      justifyContent: "center",
+      margin: "16px 0"
+    }
+  }, slots), rounds.length > 0 && h("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column-reverse",
+      gap: 4,
+      alignItems: "center",
+      marginTop: 6
+    }
+  }, rounds.map((r, i) => {
+    const sum = r.reduce((s, y) => s + (y ? 3 : 2), 0);
+    const isYang = sum === 7 || sum === 9;
+    const moving = sum === 6 || sum === 9;
+    return h("div", {
+      key: i,
+      style: {
+        fontSize: 10.5,
+        color: moving ? "#B14338" : "#8A8272"
+      }
+    }, `第${i + 1}爻：${isYang ? "陽" : "陰"}${moving ? "（動）" : ""}　（${r.map(y => y ? "字" : "花").join("")}）`);
+  })));
+}
+/* ---------------- 易經：梅花數字起卦選號面板 ---------------- */
+function PlumNumberPad({
+  stage,
+  num1,
+  onPick
+}) {
+  const nums = Array.from({
+    length: 49
+  }, (_, i) => i + 1);
+  return h("div", null, h("div", {
+    style: {
+      fontSize: 12,
+      color: "#8A8272",
+      marginBottom: 10,
+      textAlign: "center"
+    }
+  }, stage === 1 ? "心中默想一個數字，點選浮現在腦海的那一個（第一數）" : `第一數：${num1}　·　再點選浮現的第二個數字（第二數）`), h("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(7, 1fr)",
+      gap: 6
+    }
+  }, nums.map(n => h("button", {
+    key: n,
+    onClick: () => onPick(n),
+    style: {
+      padding: "9px 0",
+      borderRadius: 8,
+      border: "1px solid rgba(58,50,38,0.14)",
+      background: "#FFFFFF",
+      fontSize: 12.5,
+      fontWeight: 600,
+      color: "#3A3226"
+    }
+  }, n))));
+}
+/* ---------------- 易經：梅花物象起卦輸入面板 ---------------- */
+function PlumObjectInput({
+  value,
+  onChange,
+  onSubmit
+}) {
+  return h("div", null, h("div", {
+    style: {
+      fontSize: 12,
+      color: "#8A8272",
+      marginBottom: 10,
+      textAlign: "center"
+    }
+  }, "寫下此刻浮現在心裡的一句話，或當下看到、想到的一件物品"), h("input", {
+    value,
+    onChange: e => onChange(e.target.value),
+    placeholder: "例如：窗邊的一盆綠植",
+    style: {
+      width: "100%",
+      boxSizing: "border-box",
+      padding: "12px 14px",
+      borderRadius: 10,
+      border: "1px solid rgba(58,50,38,0.18)",
+      fontSize: 14,
+      marginBottom: 12
+    }
+  }), h("button", {
+    style: {
+      ...styles.primaryBtnFull,
+      opacity: value.trim() ? 1 : 0.4
+    },
+    disabled: !value.trim(),
+    onClick: () => value.trim() && onSubmit(value)
+  }, "依此起卦"));
+}
 function YijingLines({
   lines,
   movingPositions,
