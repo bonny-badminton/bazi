@@ -2285,6 +2285,20 @@ function yongShenPlainExplanation(topicKey, yongShen, yongShenLine, assessment) 
   const verdictText = assessment.score >= 4 ? "整體來說用神偏旺：條件與能量站在有利的一方，適合積極把握、主動推進。" : assessment.score <= 2 ? "整體來說用神偏弱：條件還不夠充足，宜謹慎行事、耐心等待轉強的時機，不要躁進。" : "整體來說用神旺衰中等：目前處於平穩狀態，成敗仍取決於你接下來怎麼應對。";
   return [whatItMeans, statusText, effectText, voidText, verdictText].filter(Boolean);
 }
+// 延伸參考（非古法本身）：把連結命盤人物的八字日主五行，拿來跟這次用神的五行對照，
+// 多一層「這件事跟你命盤底氣合不合」的視角。傳統六爻／文王卦本來就是以起卦當下的時空為準，
+// 不會參照問卦者的生辰八字，所以這段刻意獨立出來、明確標註是現代延伸，不混入六爻本身的旺衰判斷。
+function dayMasterCrossNarrative(personName, dayMasterElement, yongShenElement) {
+  const rel = wangXiangStatus(dayMasterElement, yongShenElement);
+  const relText = {
+    "旺": `跟${personName}的日主五行（${dayMasterElement}）同氣，這件事的能量跟命盤底氣算是同一國，比較容易借上力`,
+    "相": `正被${personName}的日主五行（${dayMasterElement}）生助，代表命盤底氣正在往這件事上頂，等於在幫它加分`,
+    "休": `反過來在生${personName}的日主五行（${dayMasterElement}），代表這件事就算順利，也可能要花不少心力或資源去維持，屬於消耗型的關係`,
+    "囚": `被${personName}的日主五行（${dayMasterElement}）壓著，代表命盤底氣對這件事沒有自動加分，得更主動出力才推得動`,
+    "死": `反過來剋著${personName}的日主五行（${dayMasterElement}），代表這件事跟命盤底氣有點對著幹，需要多花力氣調和，別硬碰硬`
+  }[rel.tier];
+  return `這次用神的五行，${relText}。（這段是把命盤與占卜結果交叉對照的現代延伸分析，不是六爻占卜的傳統核心邏輯，僅供輔助參考。）`;
+}
 // 結果頁頂端的「起卦依據」摘要：三種起卦方式各自秀出使用者實際操作留下的紀錄
 // （銅錢的字花組合／點選的兩個數字／輸入的字句），讓三種結果一眼就能看出是怎麼算出來的，彼此不會混淆。
 function castOriginBanner(result) {
@@ -4352,6 +4366,20 @@ function BaziApp() {
       label: yongShen.label,
       note: yongShen.note
     } : null;
+    // 連結命盤人物的延伸參考：計算該人物的八字日主五行，跟這次用神的五行交叉對照，
+    // 讓「連結命盤」在感情以外的提問類型也真的多一層分析依據，而不只是拿來判斷性別。
+    let linkedDayMasterCross = null;
+    if (linkedProfile && yongShenLine) {
+      const hourForCalc = linkedProfile.hasTime ? linkedProfile.birth.h : 12;
+      const minuteForCalc = linkedProfile.hasTime ? linkedProfile.birth.min : 0;
+      const profileBazi = computeBazi(linkedProfile.birth.y, linkedProfile.birth.m, linkedProfile.birth.d, hourForCalc, minuteForCalc);
+      const dayMasterElement = STEM_ELEMENT[profileBazi.day.stemIdx];
+      linkedDayMasterCross = {
+        personName: linkedProfile.name,
+        dayMasterElement,
+        narrative: dayMasterCrossNarrative(linkedProfile.name, dayMasterElement, yongShenLine.element)
+      };
+    }
     setYijingResult({
       ...hex,
       ...extra,
@@ -4359,7 +4387,8 @@ function BaziApp() {
       dayBranchIdx: day.branchIdx,
       monthBranchIdx,
       dressed,
-      yongShenResult
+      yongShenResult,
+      linkedDayMasterCross
     });
   };
   const isWide = useIsWide();
@@ -5341,7 +5370,29 @@ function BaziApp() {
       ...styles.subBlockText,
       marginTop: i === 0 ? 0 : 6
     }
-  }, p))) : divTopic === "other" ? /*#__PURE__*/React.createElement("div", {
+  }, p)), yijingResult.linkedDayMasterCross && h("div", {
+    style: {
+      marginTop: 10,
+      paddingTop: 10,
+      borderTop: "1px dashed rgba(58,50,38,0.16)"
+    }
+  }, h("div", {
+    style: {
+      display: "inline-block",
+      fontSize: 10.5,
+      fontWeight: 700,
+      color: "#3F6B7A",
+      background: "rgba(63,107,122,0.08)",
+      borderRadius: 6,
+      padding: "2px 6px",
+      marginBottom: 6
+    }
+  }, "延伸參考・連結命盤"), h("p", {
+    style: {
+      ...styles.subBlockText,
+      fontSize: 11.5
+    }
+  }, yijingResult.linkedDayMasterCross.narrative))) : divTopic === "other" ? /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.card,
       marginTop: 12
