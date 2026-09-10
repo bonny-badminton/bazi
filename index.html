@@ -2204,26 +2204,15 @@ const TOPIC_NARRATIVE_FRAME = {
   social: { angle: "在人際互動與合作關係上" },
   other: { angle: "在整體運勢與現況上" }
 };
-// 分類別解讀：把卦義收斂到使用者實際選擇的提問類型，並視用神旺衰給出對應的行動建議，
-// 而不是不論問什麼都輸出同一段「本卦白話卦義」。
-function topicSpecificNarrative(topicKey, hexNumber, yongShenResult) {
+// 現況：本卦卦義收斂到使用者實際選擇的提問類型，只講「現在是什麼狀態」，
+// 不夾帶用神旺衰或行動建議（那些留給後面的「力道評估」與「綜合建議」，避免同一件事被講三次）。
+function currentSituationNarrative(topicKey, hexNumber) {
   const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
-  const base = HEXAGRAM_MEANING[hexNumber];
-  let tail = "";
-  if (yongShenResult) {
-    const score = yongShenResult.assessment.score;
-    if (score >= 4) {
-      tail = `搭配這次「${yongShenResult.label}」用神偏旺的態勢來看，${frame.angle}算是站在比較有利的位置，可以稍微主動一點去推進。`;
-    } else if (score <= 2) {
-      tail = `不過這次「${yongShenResult.label}」用神偏弱，${frame.angle}目前的底氣還不夠足，建議先穩住基本盤、別急著擴大動作，等旺相再出手。`;
-    } else {
-      tail = `這次「${yongShenResult.label}」用神旺衰居中，${frame.angle}屬於「一半靠自己準備、一半看時機」的狀態，多觀察一陣子再行動會比較踏實。`;
-    }
-  }
-  return `${frame.angle}，${base}${tail}`;
+  return `${frame.angle}，${HEXAGRAM_MEANING[hexNumber]}`;
 }
 // 六爻爻位通論：不論哪一卦，初爻到上爻在《易經》體系裡各自代表事情發展的哪個階段／位置，
-// 是與具體卦名無關、獨立成立的傳統爻位理論，用來解釋「這一爻動代表變化正發生在哪個層次」。
+// 是與具體卦名無關、獨立成立的傳統爻位理論。完整版放在最後的「專業依據」區塊給熟悉易經的人核對，
+// 這裡只取極短的關鍵字，用在「走向與變化」段落裡順帶帶出，不整段重複。
 const LINE_POSITION_MEANING = {
   1: "初爻在卦的最底層，代表事情剛起步、根基尚淺的階段。這裡動爻，意味著變化正從最基礎的地方開始醞釀，行動前更需要把基本功站穩，操之過急容易站不住腳。",
   2: "二爻居於下卦之中，多半對應基層位置或身邊親近的人事，性質柔順得中。這裡動爻，變化往往與日常應對、身邊的人有關，宜用柔軟務實的方式因應，而不是硬碰硬。",
@@ -2232,19 +2221,46 @@ const LINE_POSITION_MEANING = {
   5: "五爻居上卦之中，是全卦最尊貴、最具主導力的位置。這裡動爻，代表變化的主動權多半握在你或關鍵人物手中，是採取行動、拍板定案的好時機。",
   6: "上爻在卦的最頂端，代表事情發展到極致、盛極而衰的階段。這裡動爻，提醒變化已接近尾聲或臨界點，宜見好就收、預留轉圜餘地，而不是繼續加碼下去。"
 };
-// 本卦→變卦的過程解讀：把「現在」與「動爻牽引出的下一步」串成一段完整的敘事，
-// 並附上具體一點的行動提醒，取代先前只有一句通用提示的作法。
+const LINE_POSITION_KEYWORD = {
+  1: "根基尚淺、剛起步",
+  2: "貼近日常、身邊人事",
+  3: "進退未定、容易躁動",
+  4: "牽涉外部環境、關鍵轉折",
+  5: "主動權在握、適合拍板",
+  6: "接近尾聲、宜見好就收"
+};
+// 本卦→變卦的過程解讀：只講「現在」跟「動爻牽引出的下一步」是什麼，不附行動建議
+// （行動建議留給最後的「綜合建議」），避免跟上面「本卦怎麼走到變卦」重複講同一句話。
 function hexTransitionNarrative(fromName, fromNumber, toName, toNumber) {
-  return `本卦「${fromName}」說的是現在——${HEXAGRAM_MEANING[fromNumber]}變卦「${toName}」則是動爻牽引之後，事情可能演變成的下一階段——${HEXAGRAM_MEANING[toNumber]}實務上可以這樣用：先照本卦的格局應對眼前的狀況，同時把變卦當作接下來調整方向的參考座標；兩者合看，會比只看單一卦更能掌握「現在該怎麼做」與「之後要往哪裡走」這兩個層次的問題。`;
+  return `本卦「${fromName}」說的是現在——${HEXAGRAM_MEANING[fromNumber]}變卦「${toName}」則是動爻牽引之後，事情可能演變成的下一階段——${HEXAGRAM_MEANING[toNumber]}`;
 }
-// 摘要：給一句話等級的總結，措辭刻意跟下面「詳細解讀」的展開內容不同，
-// 只講結論（現況→走向→怎麼做），細節留給詳細解讀去說明「為什麼」。
-function topicSummary(topicKey, hexResult) {
+// 走向與變化：把「有沒有變卦」跟「動爻在哪個位置」合併成一段，讓使用者知道「接下來會怎麼變」，
+// 跟上面「現況」段落（在講「現在是什麼」）分工清楚，不會互相覆述。
+function trendNarrative(topicKey, hexResult) {
   const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
-  const yongShenResult = hexResult.yongShenResult;
-  const verdict = !yongShenResult ? "目前沒有特別偏向哪一方，照本卦的格局穩步進行即可。" : yongShenResult.assessment.score >= 4 ? "條件偏向有利，可以更主動一點推進。" : yongShenResult.assessment.score <= 2 ? "條件還不夠成熟，建議先穩住、別急著擴大動作。" : "條件普通，多觀察時機再決定下一步。";
-  const changePart = hexResult.changed ? `本卦「${hexResult.name}」是現況，變卦「${hexResult.changed.name}」是接下來可能的走向——` : "六爻皆不動，狀態偏向穩定——";
-  return `${frame.angle}，${changePart}${verdict}`;
+  if (!hexResult.changed) {
+    return `六爻皆不動，代表${frame.angle}目前狀態偏向穩定，短期內不會有太大的轉折，可以直接照本卦的格局走，不用急著調整方向。`;
+  }
+  const posText = hexResult.movingPositions.map(pos => "初二三四五上"[pos - 1] + "爻（" + LINE_POSITION_KEYWORD[pos] + "）").join("、");
+  return `這支卦的動爻在「${posText}」，代表${frame.angle}的變化正從這裡開始牽動。${hexTransitionNarrative(hexResult.name, hexResult.number, hexResult.changed.name, hexResult.changed.number)}`;
+}
+// 提問時間長度的敘事框架：讓「短期／中期／長期」這個使用者自選的條件，真的對應到解讀裡該側重
+// 「當日」「當月」還是「本卦到變卦的整體路徑」，而不是選了之後對結果毫無影響的裝飾性選項。
+const DURATION_FRAME = {
+  short: { shortLabel: "短期（一到三個月）" },
+  mid: { shortLabel: "中期（半年到一年）" },
+  long: { shortLabel: "長期（一年以上）" }
+};
+function durationNarrative(durationKey, hexResult) {
+  const d = DURATION_FRAME[durationKey] || DURATION_FRAME.mid;
+  const yong = hexResult.yongShenResult;
+  if (durationKey === "short") {
+    return yong ? `你選的是${d.shortLabel}，這種時間範圍下最該參考「當日」的狀態：這次用神對當日${WANGXIANG_PLAIN[yong.assessment.dayStatus.tier]}，代表接下來這一兩步的即時反應大概是這樣，變化也會來得比較快，該調整就趁早調整，不用等太久。` : `你選的是${d.shortLabel}，這種時間範圍下變化通常來得比較快，建議直接照本卦的提醒盡快應對。`;
+  }
+  if (durationKey === "long") {
+    return hexResult.changed ? `你選的是${d.shortLabel}，這種時間範圍下，比起單一天或單一月的旺衰，更該把本卦「${hexResult.name}」演變到變卦「${hexResult.changed.name}」的這段路徑，當成長期趨勢的參考座標，眼前的旺衰只是過程中的一個切片，不用太在意一時的起伏。` : `你選的是${d.shortLabel}，六爻皆不動代表這件事的基本格局在這段時間內不會有太大轉折，可以把本卦的卦義當成貫穿這段時間的主軸。`;
+  }
+  return yong ? `你選的是${d.shortLabel}，這種時間範圍下「當月」的力道比單一天更有參考價值：這次用神對當月${WANGXIANG_PLAIN[yong.assessment.monthStatus.tier]}，可以把這個當成這段時間的基本氣氛來抓，再依實際發展微調步伐。` : `你選的是${d.shortLabel}，建議把本卦跟變卦合看，掌握這段時間裡可能出現的轉折點。`;
 }
 // 六親白話意義：不論哪一卦、哪個提問類型都成立的基礎定義，用來讓使用者知道「用神」實際對應的是什麼概念，
 // 而不是只看到「妻財」「官鬼」這種名詞卻不知道是什麼意思。
@@ -2271,9 +2287,8 @@ const MOVING_EFFECT_PLAIN = {
   "剋制": "被壓著、扣分",
   "洩耗": "被悄悄消耗掉一些力氣"
 };
-// 用神白話拆解：回傳一組短段落（而不是一句塞滿術語的長句），依序是「這個用神代表什麼、
-// 跟你的提問有什麼關係」「它現在的體質如何」「有沒有其他動爻在影響它」「有沒有旬空」「結論」，
-// 讓使用者不需要先懂六爻術語，也能看懂這段分析跟自己問的事情之間的關聯。
+// 力道評估（用神白話拆解）：只講「這股力量現在強不強、為什麼」，不下最終行動建議
+// （行動建議統一收在最後的「綜合建議」），避免跟結論段落講同一句「整體來說宜進宜退」。
 function yongShenPlainExplanation(topicKey, yongShen, yongShenLine, assessment) {
   const liuQinDesc = LIUQIN_MEANING[yongShenLine.liuQin] || "";
   const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
@@ -2282,20 +2297,37 @@ function yongShenPlainExplanation(topicKey, yongShen, yongShenLine, assessment) 
   const effectTexts = (assessment.movingEffects || []).filter(e => e.delta !== 0).map(e => `第${e.pos}爻（${e.liuQin}）對它${MOVING_EFFECT_PLAIN[e.effect] || e.effect}`);
   const effectText = effectTexts.length ? `另外，${effectTexts.join("、")}，這些正在變動的爻會直接牽動它接下來的強弱。` : "";
   const voidText = assessment.isVoid ? "要注意的是，這一爻正好遇到「旬空」，意思是它的力量暫時是虛的，事情可能會「看起來有進展、但推不太動」，建議先別急著下定論。" : "";
-  const verdictText = assessment.score >= 4 ? "整體來說用神偏旺：條件與能量站在有利的一方，適合積極把握、主動推進。" : assessment.score <= 2 ? "整體來說用神偏弱：條件還不夠充足，宜謹慎行事、耐心等待轉強的時機，不要躁進。" : "整體來說用神旺衰中等：目前處於平穩狀態，成敗仍取決於你接下來怎麼應對。";
-  return [whatItMeans, statusText, effectText, voidText, verdictText].filter(Boolean);
+  const strengthText = assessment.score >= 4 ? "整體來說這股力道偏旺，是目前條件裡比較站得住腳的一塊。" : assessment.score <= 2 ? "整體來說這股力道偏弱，是目前條件裡比較吃緊的一塊。" : "整體來說這股力道中等，不特別強也不特別弱。";
+  return [whatItMeans, statusText, effectText, voidText, strengthText].filter(Boolean);
 }
-// 延伸參考（非古法本身）：把連結命盤人物的八字日主五行，拿來跟這次用神的五行對照，
-// 多一層「這件事跟你命盤底氣合不合」的視角。傳統六爻／文王卦本來就是以起卦當下的時空為準，
+// 世應對應提問的白話說明：世／應在裝卦明細裡只標了位置，沒有說明跟這次提問的關聯，這裡補上，
+// 放在最後的「專業依據」區塊，給想核對六爻邏輯的人看。
+function shiYingTopicNote(topicKey) {
+  const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
+  return `「世」爻代表你自己在這件事裡的位置，「應」爻則代表對方、外在環境，或${frame.angle}所指的那件事本身。兩者的五行生剋關係，可以看出${frame.angle}你比較主動還是比較被動——這是熟悉六爻的人常會進一步核對的細節，一般判斷直接看上面的「力道評估」即可，不必特別記這一段。`;
+}
+// 綜合建議：唯一講「所以到底該怎麼做」的地方，統整現況、走向、力道、提問時間長度四項條件，
+// 措辭與上面每一段刻意不同，是「結論」而不是「預告」，放在完整分析的最後而不是最前面，
+// 避免使用者一開始就看到結論、後面內容變得像是同一句話换句話說。
+function conclusionNarrative(topicKey, hexResult, durationKey) {
+  const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
+  const yong = hexResult.yongShenResult;
+  const durationLabel = (DURATION_FRAME[durationKey] || DURATION_FRAME.mid).shortLabel;
+  const verdict = !yong ? "目前沒有特別偏向哪一方，照本卦的格局穩步進行即可。" : yong.assessment.score >= 4 ? "條件偏向有利，可以更主動一點推進。" : yong.assessment.score <= 2 ? "條件還不夠成熟，建議先穩住、別急著擴大動作，等時機轉強再出手。" : "條件普通，建議多觀察時機再決定下一步，不急著一次到位。";
+  const changeHint = hexResult.changed ? `過程中留意事情會從「${hexResult.name}」慢慢往「${hexResult.changed.name}」的方向移動，` : "";
+  return `綜合來看，${frame.angle}，就你選的${durationLabel}來說，${changeHint}${verdict}`;
+}
+// 延伸參考（非古法本身）：把連結命盤的八字日主五行，拿來跟這次用神的五行對照，
+// 多一層「這件事跟命盤底氣合不合」的視角。傳統六爻／文王卦本來就是以起卦當下的時空為準，
 // 不會參照問卦者的生辰八字，所以這段刻意獨立出來、明確標註是現代延伸，不混入六爻本身的旺衰判斷。
-function dayMasterCrossNarrative(personName, dayMasterElement, yongShenElement) {
+function dayMasterCrossNarrative(dayMasterElement, yongShenElement) {
   const rel = wangXiangStatus(dayMasterElement, yongShenElement);
   const relText = {
-    "旺": `跟${personName}的日主五行（${dayMasterElement}）同氣，這件事的能量跟命盤底氣算是同一國，比較容易借上力`,
-    "相": `正被${personName}的日主五行（${dayMasterElement}）生助，代表命盤底氣正在往這件事上頂，等於在幫它加分`,
-    "休": `反過來在生${personName}的日主五行（${dayMasterElement}），代表這件事就算順利，也可能要花不少心力或資源去維持，屬於消耗型的關係`,
-    "囚": `被${personName}的日主五行（${dayMasterElement}）壓著，代表命盤底氣對這件事沒有自動加分，得更主動出力才推得動`,
-    "死": `反過來剋著${personName}的日主五行（${dayMasterElement}），代表這件事跟命盤底氣有點對著幹，需要多花力氣調和，別硬碰硬`
+    "旺": `跟你連結命盤的日主五行（${dayMasterElement}）同氣，這件事的能量跟命盤底氣算是同一國，比較容易借上力`,
+    "相": `正被連結命盤的日主五行（${dayMasterElement}）生助，代表命盤底氣正在往這件事上頂，等於在幫它加分`,
+    "休": `反過來在生連結命盤的日主五行（${dayMasterElement}），代表這件事就算順利，也可能要花不少心力或資源去維持，屬於消耗型的關係`,
+    "囚": `被連結命盤的日主五行（${dayMasterElement}）壓著，代表命盤底氣對這件事沒有自動加分，得更主動出力才推得動`,
+    "死": `反過來剋著連結命盤的日主五行（${dayMasterElement}），代表這件事跟命盤底氣有點對著幹，需要多花力氣調和，別硬碰硬`
   }[rel.tier];
   return `這次用神的五行，${relText}。（這段是把命盤與占卜結果交叉對照的現代延伸分析，不是六爻占卜的傳統核心邏輯，僅供輔助參考。）`;
 }
@@ -4375,9 +4407,8 @@ function BaziApp() {
       const profileBazi = computeBazi(linkedProfile.birth.y, linkedProfile.birth.m, linkedProfile.birth.d, hourForCalc, minuteForCalc);
       const dayMasterElement = STEM_ELEMENT[profileBazi.day.stemIdx];
       linkedDayMasterCross = {
-        personName: linkedProfile.name,
         dayMasterElement,
-        narrative: dayMasterCrossNarrative(linkedProfile.name, dayMasterElement, yongShenLine.element)
+        narrative: dayMasterCrossNarrative(dayMasterElement, yongShenLine.element)
       };
     }
     setYijingResult({
@@ -4987,7 +5018,7 @@ function BaziApp() {
     style: styles.descCenter
   }, (divTool === "tarot" ? "塔羅牌" : "易經") + " · 這次想問的是關於？", linkedPerson && /*#__PURE__*/React.createElement("div", {
     style: styles.linkedTag
-  }, "已連結：" + linkedPerson.name)), /*#__PURE__*/React.createElement("div", {
+  }, "已連結命盤")), /*#__PURE__*/React.createElement("div", {
     style: styles.topicGrid
   }, TOPICS.map(t => /*#__PURE__*/React.createElement("div", {
     key: t.key,
@@ -5258,9 +5289,19 @@ function BaziApp() {
       }
     }, origin.desc)));
   })(),
-  // 本卦的意思（簡單）
+  // ① 卦象總覽：只放卦本身（本卦／變卦的名稱與爻圖），完整意義留給下面的完整分析，這裡不重複寫
   h("div", {
-    style: styles.card
+    style: {
+      display: "flex",
+      gap: 10,
+      flexWrap: isWide ? "nowrap" : "wrap"
+    }
+  }, h("div", {
+    style: {
+      ...styles.card,
+      flex: 1,
+      minWidth: 150
+    }
   }, h("div", {
     style: {
       display: "flex",
@@ -5278,14 +5319,11 @@ function BaziApp() {
     lines: yijingResult.lines,
     movingPositions: yijingResult.movingPositions,
     isWide: isWide
-  }), h("p", {
-    style: styles.subBlockText
-  }, HEXAGRAM_MEANING[yijingResult.number])),
-  // 變卦的意思（簡單，若有動爻才會有變卦）
-  yijingResult.changed ? h("div", {
+  })), yijingResult.changed ? h("div", {
     style: {
       ...styles.card,
-      marginTop: 12
+      flex: 1,
+      minWidth: 150
     }
   }, h("div", {
     style: styles.subBlockTitle
@@ -5293,152 +5331,161 @@ function BaziApp() {
     lines: yijingResult.changed.lines,
     movingPositions: [],
     isWide: isWide
-  }), h("p", {
-    style: styles.subBlockText
-  }, HEXAGRAM_MEANING[yijingResult.changed.number])) : h("div", {
+  })) : h("div", {
+    style: {
+      ...styles.card,
+      flex: 1,
+      minWidth: 150,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center"
+    }
+  }, h("div", {
+    style: styles.subBlockTitle
+  }, "沒有變卦"), h("p", {
+    style: {
+      ...styles.subBlockText,
+      marginTop: 6
+    }
+  }, "六爻皆不動，狀態穩定。"))),
+  // ② 完整分析：現況→走向→力道→（命盤延伸）→時間怎麼看→綜合建議，一路往下每段講新的東西，
+  // 刻意不互相覆述；這是整頁真正要讓一般人看懂「這跟我問的事有什麼關係」的地方。
+  divTopic && h("div", {
     style: {
       ...styles.card,
       marginTop: 12
     }
   }, h("div", {
-    style: styles.subBlockTitle
-  }, "沒有變卦"), h("p", {
-    style: styles.subBlockText
-  }, "六爻皆不動，代表狀態穩定，直接以本卦作為參考即可，不必另外套用變卦。")),
-  // 摘要：一句話等級的結論，用詞刻意跟下面的詳細解讀不同，避免讀起來像同一段話換句話說
-  divTopic && h("div", {
     style: {
-      ...styles.resultCard,
+      ...styles.subBlockTitle,
+      marginBottom: 10
+    }
+  }, "完整分析・", (TOPICS.find(t => t.key === divTopic) || {}).label || "整體"),
+  h("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#7A5A3F",
+      marginBottom: 3
+    }
+  }, "現況"), h("p", {
+    style: styles.subBlockText
+  }, currentSituationNarrative(divTopic, yijingResult.number)),
+  h("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#7A5A3F",
       marginTop: 12,
-      textAlign: "left"
+      marginBottom: 3
+    }
+  }, "走向"), h("p", {
+    style: styles.subBlockText
+  }, trendNarrative(divTopic, yijingResult)),
+  h("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 12,
+      marginBottom: 3
     }
   }, h("div", {
     style: {
-      ...styles.subBlockTitle,
-      marginBottom: 6
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#7A5A3F"
     }
-  }, "摘要"), h("p", {
+  }, "力道評估", yijingResult.yongShenResult ? "・" + yijingResult.yongShenResult.label : ""), yijingResult.yongShenResult && h(StarScore, {
+    score: yijingResult.yongShenResult.assessment.score
+  })), yijingResult.yongShenResult ? yongShenPlainExplanation(divTopic, yijingResult.yongShenResult, yijingResult.yongShenResult.line, yijingResult.yongShenResult.assessment).map((p, i) => h("p", {
+    key: i,
+    style: {
+      ...styles.subBlockText,
+      marginTop: i === 0 ? 0 : 6
+    }
+  }, p)) : divTopic === "other" ? h("p", {
+    style: styles.subBlockText
+  }, "這次問的是整體狀況，沒有指定特定六親作為用神，可直接參考上面「現況」與「走向」的說明。") : h("p", {
+    style: styles.subBlockText
+  }, "此次對應的六親沒有出現在這支卦裡（用神不上卦），代表這件事目前還沒有明顯的著力點顯現在卦象中，不用強行套用解讀，可以換個角度重新提問，或稍後重新起卦一次。"),
+  yijingResult.linkedDayMasterCross && h(React.Fragment, null, h("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#3F6B7A",
+      marginTop: 12,
+      marginBottom: 3
+    }
+  }, "命盤延伸參考"), h("p", {
+    style: {
+      ...styles.subBlockText,
+      fontSize: 11.5
+    }
+  }, yijingResult.linkedDayMasterCross.narrative)),
+  h("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "#7A5A3F",
+      marginTop: 12,
+      marginBottom: 3
+    }
+  }, "時間怎麼看"), h("p", {
+    style: styles.subBlockText
+  }, durationNarrative(divDuration, yijingResult)),
+  h("div", {
+    style: {
+      marginTop: 14,
+      paddingTop: 12,
+      borderTop: "1px solid rgba(58,50,38,0.1)"
+    }
+  }, h("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      marginBottom: 3
+    }
+  }, "綜合建議"), h("p", {
     style: {
       ...styles.subBlockText,
       fontWeight: 600
     }
-  }, topicSummary(divTopic, yijingResult))),
-  // 詳細解讀（區塊標題）
-  divTopic && h("div", {
+  }, conclusionNarrative(divTopic, yijingResult, divDuration)))),
+  // ③ 專業依據：卦德、世應、動爻位置通論、完整六爻明細，給熟悉易經的人核對上面的解讀是怎麼推出來的
+  h("div", {
     style: {
       fontSize: 12.5,
       fontWeight: 700,
       color: "#8A8272",
       margin: "16px 4px 6px"
     }
-  }, "詳細解讀"),
-  // 卦象與提問：卦德（上下卦組合）＋收斂到提問類型的解讀
-  divTopic && h("div", {
+  }, "專業依據（易經細節，供核對參考）"), h("div", {
     style: styles.card
   }, h("div", {
     style: styles.subBlockTitle
-  }, "卦象與提問"), h("p", {
+  }, "卦德・上下卦組成"), h("p", {
     style: styles.subBlockText
-  }, topicSpecificNarrative(divTopic, yijingResult.number, yijingResult.yongShenResult)), h("p", {
+  }, trigramCombinationNarrative(yijingResult.upperVal, yijingResult.lowerVal)), divTopic && h("p", {
     style: {
       ...styles.subBlockText,
       marginTop: 8,
       paddingTop: 8,
       borderTop: "1px solid rgba(58,50,38,0.08)"
     }
-  }, trigramCombinationNarrative(yijingResult.upperVal, yijingResult.lowerVal))),
-  // 用神分析：白話拆解，說明用神跟提問的關聯、目前體質、有沒有其他變動在影響它
-  yijingResult.yongShenResult ? /*#__PURE__*/React.createElement("div", {
+  }, shiYingTopicNote(divTopic)), yijingResult.movingPositions.length > 0 && h("div", {
     style: {
-      ...styles.card,
-      marginTop: 12
+      marginTop: 8,
+      paddingTop: 8,
+      borderTop: "1px solid rgba(58,50,38,0.08)"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 8
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: styles.subBlockTitle
-  }, "用神分析・", yijingResult.yongShenResult.label), /*#__PURE__*/React.createElement(StarScore, {
-    score: yijingResult.yongShenResult.assessment.score
-  })), yongShenPlainExplanation(divTopic, yijingResult.yongShenResult, yijingResult.yongShenResult.line, yijingResult.yongShenResult.assessment).map((p, i) => h("p", {
-    key: i,
-    style: {
-      ...styles.subBlockText,
-      marginTop: i === 0 ? 0 : 6
-    }
-  }, p)), yijingResult.linkedDayMasterCross && h("div", {
-    style: {
-      marginTop: 10,
-      paddingTop: 10,
-      borderTop: "1px dashed rgba(58,50,38,0.16)"
-    }
-  }, h("div", {
-    style: {
-      display: "inline-block",
-      fontSize: 10.5,
-      fontWeight: 700,
-      color: "#3F6B7A",
-      background: "rgba(63,107,122,0.08)",
-      borderRadius: 6,
-      padding: "2px 6px",
-      marginBottom: 6
-    }
-  }, "延伸參考・連結命盤"), h("p", {
-    style: {
-      ...styles.subBlockText,
-      fontSize: 11.5
-    }
-  }, yijingResult.linkedDayMasterCross.narrative))) : divTopic === "other" ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      ...styles.card,
-      marginTop: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: styles.subBlockTitle
-  }, "用神分析"), /*#__PURE__*/React.createElement("p", {
-    style: styles.subBlockText
-  }, "這次問的是整體狀況，沒有指定特定六親作為用神，可直接參考本卦卦義，並留意下方明細裡「世」（自己）與「應」（對方或所問之事）的生剋關係作為輔助判斷。")) : /*#__PURE__*/React.createElement("div", {
-    style: {
-      ...styles.card,
-      marginTop: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: styles.subBlockTitle
-  }, "用神分析"), /*#__PURE__*/React.createElement("p", {
-    style: styles.subBlockText
-  }, "此次對應的六親沒有出現在這支卦裡（用神不上卦），意思是這件事目前還沒有明顯的著力點顯現在卦象中，不用強行套用解讀，建議可以換個角度重新提問，或稍後重新起卦一次。")),
-  // 動爻解讀
-  yijingResult.movingPositions.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      ...styles.card,
-      marginTop: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: styles.subBlockTitle
-  }, "動爻解讀"), yijingResult.movingPositions.map(pos => /*#__PURE__*/React.createElement("p", {
+  }, yijingResult.movingPositions.map(pos => h("p", {
     key: pos,
     style: {
       ...styles.subBlockText,
-      marginTop: 6
+      marginTop: 4
     }
-  }, /*#__PURE__*/React.createElement("b", null, "第", pos, "爻（", "初二三四五上"[pos - 1], "爻）動："), LINE_POSITION_MEANING[pos]))),
-  // 本卦→變卦怎麼演變（只有真的有變卦時才顯示）
-  yijingResult.changed && h("div", {
-    style: {
-      ...styles.card,
-      marginTop: 12
-    }
-  }, h("div", {
-    style: styles.subBlockTitle
-  }, "本卦怎麼走到變卦"), h("p", {
-    style: styles.subBlockText
-  }, hexTransitionNarrative(yijingResult.name, yijingResult.number, yijingResult.changed.name, yijingResult.changed.number))),
-  // 完整六爻明細：移到最後，定位為「進階參考」，不必每次都細看
-  yijingResult.dressed && /*#__PURE__*/React.createElement("div", {
+  }, h("b", null, "第", pos, "爻（", "初二三四五上"[pos - 1], "爻）動："), LINE_POSITION_MEANING[pos])))), yijingResult.dressed && /*#__PURE__*/React.createElement("div", {
     style: {
       ...styles.card,
       marginTop: 12
@@ -5450,15 +5497,13 @@ function BaziApp() {
       color: "#8A8272",
       marginBottom: 8
     }
-  }, "完整六爻明細（進階參考）"), /*#__PURE__*/React.createElement(YijingDressedTable, {
+  }, "完整六爻明細"), /*#__PURE__*/React.createElement(YijingDressedTable, {
     dressed: yijingResult.dressed,
     isWide: isWide
-  })), /*#__PURE__*/React.createElement("div", {
-    style: styles.ziweiNote
-  }, "六爻明細裡「世」代表問卦的自己、「應」代表對方或所問之事，兩者的生剋關係是判斷吉凶的重要依據；「空」（旬空）代表該爻力量暫時虛浮、較難發揮作用。"), /*#__PURE__*/React.createElement("button", {
+  })), /*#__PURE__*/React.createElement("button", {
     style: {
       ...styles.primaryBtnFull,
-      marginTop: 12
+      marginTop: 16
     },
     onClick: () => {
       resetYijingCastState();
