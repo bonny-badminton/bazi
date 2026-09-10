@@ -2229,20 +2229,15 @@ const LINE_POSITION_KEYWORD = {
   5: "主動權在握、適合拍板",
   6: "接近尾聲、宜見好就收"
 };
-// 本卦→變卦的過程解讀：只講「現在」跟「動爻牽引出的下一步」是什麼，不附行動建議
-// （行動建議留給最後的「綜合建議」），避免跟上面「本卦怎麼走到變卦」重複講同一句話。
-function hexTransitionNarrative(fromName, fromNumber, toName, toNumber) {
-  return `本卦「${fromName}」說的是現在——${HEXAGRAM_MEANING[fromNumber]}變卦「${toName}」則是動爻牽引之後，事情可能演變成的下一階段——${HEXAGRAM_MEANING[toNumber]}`;
-}
-// 走向與變化：把「有沒有變卦」跟「動爻在哪個位置」合併成一段，讓使用者知道「接下來會怎麼變」，
-// 跟上面「現況」段落（在講「現在是什麼」）分工清楚，不會互相覆述。
+// 走向與變化：只講「變卦本身是什麼意思」跟「動爻在哪個位置」，不重講本卦意思
+// （本卦意思已經在上面「現況」段落講過），避免兩段文字大量重疊。
 function trendNarrative(topicKey, hexResult) {
   const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
   if (!hexResult.changed) {
     return `六爻皆不動，代表${frame.angle}目前狀態偏向穩定，短期內不會有太大的轉折，可以直接照本卦的格局走，不用急著調整方向。`;
   }
   const posText = hexResult.movingPositions.map(pos => "初二三四五上"[pos - 1] + "爻（" + LINE_POSITION_KEYWORD[pos] + "）").join("、");
-  return `這支卦的動爻在「${posText}」，代表${frame.angle}的變化正從這裡開始牽動。${hexTransitionNarrative(hexResult.name, hexResult.number, hexResult.changed.name, hexResult.changed.number)}`;
+  return `這支卦的動爻在「${posText}」，代表${frame.angle}的變化正從這裡開始牽動，會慢慢從本卦「${hexResult.name}」演變成變卦「${hexResult.changed.name}」——${HEXAGRAM_MEANING[hexResult.changed.number]}`;
 }
 // 提問時間長度的敘事框架：讓「短期／中期／長期」這個使用者自選的條件，真的對應到解讀裡該側重
 // 「當日」「當月」還是「本卦到變卦的整體路徑」，而不是選了之後對結果毫無影響的裝飾性選項。
@@ -2306,14 +2301,49 @@ function shiYingTopicNote(topicKey) {
   const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
   return `「世」爻代表你自己在這件事裡的位置，「應」爻則代表對方、外在環境，或${frame.angle}所指的那件事本身。兩者的五行生剋關係，可以看出${frame.angle}你比較主動還是比較被動——這是熟悉六爻的人常會進一步核對的細節，一般判斷直接看上面的「力道評估」即可，不必特別記這一段。`;
 }
+// 綜合建議的行動語氣要貼合提問類型：工作／財運適合「推進、出手」這類語氣，
+// 但健康、感情、人際講「等時機轉強再出手」會顯得像在講投資，所以分開寫。
+const VERDICT_BY_TOPIC = {
+  work: {
+    favorable: "條件偏向有利，可以更主動一點推進。",
+    neutral: "條件普通，建議多觀察時機再決定下一步，不急著一次到位。",
+    unfavorable: "條件還不夠成熟，建議先穩住、別急著擴大動作，等時機轉強再出手。"
+  },
+  money: {
+    favorable: "條件偏向有利，可以考慮積極一點運用，但仍要留意風險控管。",
+    neutral: "條件普通，建議先小幅嘗試、多觀察，別一次押太大。",
+    unfavorable: "條件還不夠成熟，建議先控制風險、別貿然加碼，等時機轉強再說。"
+  },
+  love: {
+    favorable: "條件偏向有利，可以更主動一點表達心意、往前推進。",
+    neutral: "條件普通，順其自然就好，不用刻意加快，也不用勉強什麼。",
+    unfavorable: "條件還不夠成熟，不用勉強自己或對方，先把重心放回自己身上比較實在。"
+  },
+  health: {
+    favorable: "條件偏向有利，可以趁狀況好的時候多留意保養、逐步調整作息。",
+    neutral: "條件普通，維持現有作息、規律生活即可，留意身體發出的訊號再慢慢調整。",
+    unfavorable: "條件還不夠成熟，建議多休息、別逞強，該檢查或就醫的部分優先處理，不要拖。"
+  },
+  social: {
+    favorable: "條件偏向有利，可以更主動一點經營這段關係或人脈。",
+    neutral: "條件普通，順著平常的步調互動即可，不用特別加快或退讓。",
+    unfavorable: "條件還不夠成熟，不用勉強維繫，先照顧好自己的步調就好。"
+  },
+  other: {
+    favorable: "條件偏向有利，可以順勢而為、稍微主動一點。",
+    neutral: "條件普通，持續觀察，見機行事即可。",
+    unfavorable: "條件還不夠成熟，建議謹慎行事，先別躁進。"
+  }
+};
 // 綜合建議：唯一講「所以到底該怎麼做」的地方，統整現況、走向、力道、提問時間長度四項條件，
 // 措辭與上面每一段刻意不同，是「結論」而不是「預告」，放在完整分析的最後而不是最前面，
 // 避免使用者一開始就看到結論、後面內容變得像是同一句話换句話說。
 function conclusionNarrative(topicKey, hexResult, durationKey) {
   const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
+  const verdictSet = VERDICT_BY_TOPIC[topicKey] || VERDICT_BY_TOPIC.other;
   const yong = hexResult.yongShenResult;
   const durationLabel = (DURATION_FRAME[durationKey] || DURATION_FRAME.mid).shortLabel;
-  const verdict = !yong ? "目前沒有特別偏向哪一方，照本卦的格局穩步進行即可。" : yong.assessment.score >= 4 ? "條件偏向有利，可以更主動一點推進。" : yong.assessment.score <= 2 ? "條件還不夠成熟，建議先穩住、別急著擴大動作，等時機轉強再出手。" : "條件普通，建議多觀察時機再決定下一步，不急著一次到位。";
+  const verdict = !yong ? "目前沒有特別偏向哪一方，照本卦的格局穩步進行即可。" : yong.assessment.score >= 4 ? verdictSet.favorable : yong.assessment.score <= 2 ? verdictSet.unfavorable : verdictSet.neutral;
   const changeHint = hexResult.changed ? `過程中留意事情會從「${hexResult.name}」慢慢往「${hexResult.changed.name}」的方向移動，` : "";
   return `綜合來看，${frame.angle}，就你選的${durationLabel}來說，${changeHint}${verdict}`;
 }
