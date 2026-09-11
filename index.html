@@ -2246,16 +2246,26 @@ const DURATION_FRAME = {
   mid: { shortLabel: "中期（半年到一年）" },
   long: { shortLabel: "長期（一年以上）" }
 };
+// 時間怎麼看：不重講「你選了短期所以看當日」這種使用者自己已經知道的邏輯，
+// 直接給這段時間該怎麼預期、怎麼因應的具體內容（風向偏向哪邊、該積極還是該求穩）。
 function durationNarrative(durationKey, hexResult) {
-  const d = DURATION_FRAME[durationKey] || DURATION_FRAME.mid;
   const yong = hexResult.yongShenResult;
   if (durationKey === "short") {
-    return yong ? `你選的是${d.shortLabel}，這種時間範圍下最該參考「當日」的狀態：這次用神對當日${WANGXIANG_PLAIN[yong.assessment.dayStatus.tier]}，代表接下來這一兩步的即時反應大概是這樣，變化也會來得比較快，該調整就趁早調整，不用等太久。` : `你選的是${d.shortLabel}，這種時間範圍下變化通常來得比較快，建議直接照本卦的提醒盡快應對。`;
+    if (!yong) return "接下來一到三個月，事情通常會變化得比較快，建議盯緊本卦到變卦的轉折，別拖到後面才處理。";
+    const t = yong.assessment.dayStatus.tier;
+    if (t === "旺" || t === "相") return "接下來一到三個月風向偏向有利，想推進的事這段時間可以積極一點去做，越拖優勢越不明顯。";
+    if (t === "死" || t === "囚") return "接下來一到三個月阻力偏大，遇到卡關或不順不用太意外，這段時間宜先求穩、別硬拚，避免在這個節骨眼上做重大決定。";
+    return "接下來一到三個月起伏不算大，照原本的步調走、視實際狀況再微調就好，不用刻意加快或放慢。";
   }
   if (durationKey === "long") {
-    return hexResult.changed ? `你選的是${d.shortLabel}，這種時間範圍下，比起單一天或單一月的旺衰，更該把本卦「${hexResult.name}」演變到變卦「${hexResult.changed.name}」的這段路徑，當成長期趨勢的參考座標，眼前的旺衰只是過程中的一個切片，不用太在意一時的起伏。` : `你選的是${d.shortLabel}，六爻皆不動代表這件事的基本格局在這段時間內不會有太大轉折，可以把本卦的卦義當成貫穿這段時間的主軸。`;
+    if (!hexResult.changed) return "拉長到一年以上來看，六爻皆不動代表格局穩定，不用預期會有大轉折，維持現在的方向持續累積即可。";
+    return `拉長到一年以上來看，重點不是哪一天或哪個月的旺衰，而是整件事會從「${hexResult.name}」慢慢走到「${hexResult.changed.name}」——換句話說，眼前遇到的起伏多半只是過程中的一段，不用因為一時不順或一時順利就對長期結果下定論。`;
   }
-  return yong ? `你選的是${d.shortLabel}，這種時間範圍下「當月」的力道比單一天更有參考價值：這次用神對當月${WANGXIANG_PLAIN[yong.assessment.monthStatus.tier]}，可以把這個當成這段時間的基本氣氛來抓，再依實際發展微調步伐。` : `你選的是${d.shortLabel}，建議把本卦跟變卦合看，掌握這段時間裡可能出現的轉折點。`;
+  if (!yong) return "半年到一年這段時間，建議把本卦跟變卦擺在一起看，抓大方向就好，不用太糾結單一時間點的細節。";
+  const t = yong.assessment.monthStatus.tier;
+  if (t === "旺" || t === "相") return "半年到一年這段時間大環境偏向有利，是可以放手推進、多做嘗試的階段。";
+  if (t === "死" || t === "囚") return "半年到一年這段時間大環境偏緊，建議別把目標設得太積極，先求穩、慢慢調整，等狀況鬆動再加快腳步。";
+  return "半年到一年這段時間大環境普通，穩紮穩打、跟著實際進展調整步伐即可，不用預設會特別順或特別卡。";
 }
 // 六親白話意義：不論哪一卦、哪個提問類型都成立的基礎定義，用來讓使用者知道「用神」實際對應的是什麼概念，
 // 而不是只看到「妻財」「官鬼」這種名詞卻不知道是什麼意思。
@@ -2300,6 +2310,64 @@ function yongShenPlainExplanation(topicKey, yongShen, yongShenLine, assessment) 
 function shiYingTopicNote(topicKey) {
   const frame = TOPIC_NARRATIVE_FRAME[topicKey] || TOPIC_NARRATIVE_FRAME.other;
   return `「世」爻代表你自己在這件事裡的位置，「應」爻則代表對方、外在環境，或${frame.angle}所指的那件事本身。兩者的五行生剋關係，可以看出${frame.angle}你比較主動還是比較被動——這是熟悉六爻的人常會進一步核對的細節，一般判斷直接看上面的「力道評估」即可，不必特別記這一段。`;
+}
+// 重點提醒：這是整份分析裡唯一「直接給答案」的地方——會不會有狀況、要不要擔心、還是可以放心，
+// 講清楚具體的判斷，而不是停留在「力道偏旺／偏弱」這種抽象描述。放在完整分析最上方，
+// 讓使用者一進來就先看到重點，下面現況／走向／力道評估等段落則是支撐這個判斷的細節依據。
+const HEADLINE_BY_TOPIC = {
+  work: {
+    favorable: "近期在工作上機會站得住腳，值得主動爭取、放手去做。",
+    neutral: "近期工作運勢普通，沒有明顯警訊，但也稱不上特別順，按部就班、穩紮穩打即可。",
+    unfavorable: "近期工作上容易碰壁或阻力較大，建議先觀望，避免這時候做重大決定或貿然轉換跑道。"
+  },
+  money: {
+    favorable: "近期財運偏旺，在合理範圍內可以積極一點運用，機會值得把握。",
+    neutral: "近期財運普通，沒有特別的機會，也沒有明顯破財跡象，維持現有節奏即可。",
+    unfavorable: "近期財務容易不順或有破財跡象，建議保守以對，避免大額進出或衝動投資。"
+  },
+  love: {
+    favorable: "近期感情運勢不錯，關係有機會更進一步，可以多主動一點。",
+    neutral: "近期感情運勢平淡，沒有太大起伏，順其自然發展就好，不用刻意加溫。",
+    unfavorable: "近期感情容易有摩擦或距離感，建議多一點耐心與包容，別急著逼出結果。"
+  },
+  health: {
+    favorable: "近期身體底子還算撐得住，卦象上沒有明顯要提防的地方，維持現在的作息即可，不用太擔心。",
+    neutral: "身體狀況普通，沒有特別的警訊，但也稱不上穩固，建議維持規律作息，有異狀就及早處理，別拖。",
+    unfavorable: "這段時間身體的抵抗力比較弱，如果本來就有不舒服的地方，建議提高警覺、及早檢查或就醫，不要硬撐。"
+  },
+  social: {
+    favorable: "近期人際互動順暢，貴人運不錯，可以多爭取合作或交流的機會。",
+    neutral: "近期人際關係平穩，沒有太大波瀾，維持一般互動即可。",
+    unfavorable: "近期人際容易有誤會或摩擦，溝通時要更謹慎，避免衝動發言或倉促下結論。"
+  },
+  other: {
+    favorable: "整體運勢偏向有利，可以順勢而為、稍微主動一點。",
+    neutral: "整體運勢普通，沒有特別的機會，也沒有明顯警訊，持續觀察即可。",
+    unfavorable: "整體運勢有點卡，宜謹慎行事，這段時間先別躁進。"
+  }
+};
+// 動爻牽動用神的方向提示：正在變強還是變弱，讓「重點提醒」不只是當下的一張快照，還帶一點方向感。
+function yongShenTrendHint(assessment) {
+  const net = (assessment.movingEffects || []).reduce((s, e) => s + (e.delta || 0), 0);
+  if (net > 0.3) return "而且卦裡有其他變動的爻正在幫它加分，情況有機會繼續往好的方向走。";
+  if (net < -0.3) return "而且卦裡有其他變動的爻正在消耗或壓制它，情況可能還會再弱一段時間，要多留意。";
+  return "";
+}
+function yongShenVoidHint(assessment) {
+  return assessment.isVoid ? "不過這一爻正好遇到旬空，實際情況可能比卦面看起來更不明朗，建議近期多觀察，別太快下定論。" : "";
+}
+// 重點提醒主函式：依用神旺衰分出三種判斷（有利／普通／不利），疊加方向提示與旬空提醒。
+// 沒有用神可用時（例如問「其他」或用神不上卦），改用比較保守、不下重話的版本。
+function verdictHeadline(topicKey, hexResult) {
+  const headlineSet = HEADLINE_BY_TOPIC[topicKey] || HEADLINE_BY_TOPIC.other;
+  const yong = hexResult.yongShenResult;
+  if (!yong) {
+    return "這次沒有明確指向哪一方的六親可以拿來判斷旺衰，代表這件事目前還沒有很明顯的著力點，建議直接參考下面本卦與變卦的走向，再視實際發展決定下一步。";
+  }
+  const tier = yong.assessment.score >= 4 ? "favorable" : yong.assessment.score <= 2 ? "unfavorable" : "neutral";
+  const trend = yongShenTrendHint(yong.assessment);
+  const voidHint = yongShenVoidHint(yong.assessment);
+  return [headlineSet[tier], trend, voidHint].filter(Boolean).join("");
 }
 // 綜合建議的行動語氣要貼合提問類型：工作／財運適合「推進、出手」這類語氣，
 // 但健康、感情、人際講「等時機轉強再出手」會顯得像在講投資，所以分開寫。
@@ -5391,6 +5459,28 @@ function BaziApp() {
       marginBottom: 10
     }
   }, "完整分析・", (TOPICS.find(t => t.key === divTopic) || {}).label || "整體"),
+  h("div", {
+    style: {
+      background: "rgba(177,67,56,0.07)",
+      border: "1px solid rgba(177,67,56,0.18)",
+      borderRadius: 10,
+      padding: "10px 12px",
+      marginBottom: 12
+    }
+  }, h("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: "#b3492b",
+      marginBottom: 3
+    }
+  }, "重點提醒"), h("p", {
+    style: {
+      ...styles.subBlockText,
+      fontWeight: 600,
+      margin: 0
+    }
+  }, verdictHeadline(divTopic, yijingResult))),
   h("div", {
     style: {
       fontSize: 12,
